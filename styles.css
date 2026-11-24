@@ -655,3 +655,18 @@ body.reading .library-btn { display: none; }
 .status-row .chip.on { background: #fff3cc; border-color: #d9a400; }
 @media (max-width: 900px) { .status-row.four { grid-template-columns: repeat(2, 1fr); } }
 @media (prefers-reduced-motion: reduce) { .alarm-box.alarm.beep { outline-width: 2px; } }
+/* ESP32 chapter 2: plant watering */
+.alarm-box.watering { background: #d7e9f8; border-color: #2f86d6; }
+.alarm-box.watering .al-bar i { background: #2f86d6; }
+.alarm-box.soaking { background: #d6eeee; border-color: #1f9aa0; }
+.alarm-box.soaking .al-bar i { background: #1f9aa0; }
+.chip.prog-idle b { color: #1f7a42; }
+.chip.prog-watering b { color: #1d64a8; }
+.chip.prog-soaking b { color: #15797e; }
+.chip.prog-locked b { color: #c0392b; }
+.slider-ctl label { display: block; font-size: 13px; }
+.slider-ctl input[type=range] { width: 100%; margin: 6px 0 10px; }
+.hold-btn { width: 100%; margin: 4px 0 2px; touch-action: none; user-select: none; }
+.hold-btn.held { background: var(--ink); color: #f3ecd6; }
+.explain-list details, .steps-list details { margin-top: 4px; font-size: 12.5px; color: var(--ink-soft); }
+.explain-list summary, .steps-list summary { cursor: pointer; font-weight: 600; color: var(--teal); }

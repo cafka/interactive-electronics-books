@@ -22,6 +22,9 @@ export const WORLD_DEFAULTS = {
   spikeChance: 0.03, // chance per reading of a spike when the sensor is noisy
 };
 
+/** Strength of the "weak pump" fault of the page. Weak enough to need more pulses than the time limit allows. */
+export const WEAK_PUMP = 0.45;
+
 /** Small seeded random generator (mulberry32): the same seed gives the same noise, so tests are repeatable. */
 export function makeRng(seed = 12345) {
   let a = seed >>> 0;

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { PlantWatering, parseSettings, PINS, LOCK, moisturePercent, rawFromPercent } from '../src/books/esp32/plantWatering.js';
-import { PlantWorld } from '../src/books/esp32/plantWorld.js';
+import { PlantWorld, WORLD_DEFAULTS, WEAK_PUMP } from '../src/books/esp32/plantWorld.js';
 import { electricalCheck, PARTS, CONNECTIONS, FAULTS, NETS, PIN_TABLE } from '../src/books/esp32/plantParts.js';
 
 const source = readFileSync(new URL('../arduino/plant_watering/plant_watering.ino', import.meta.url), 'utf8');
@@ -373,6 +373,22 @@ test('LED patterns: idle flash, solid while watering, slow blink while soaking, 
     assert.ok(edges === n || edges === n - 1 || edges === n + 1, `code ${n}: ${edges} blinks`);
     assert.ok(Math.abs(on - n * S.ledCodeOn) <= S.ledCodeOn, `code ${n}: ${on} ms on`);
   }
+});
+
+test('page scenarios with the default world (evaporation on): each guided experiment ends as the page says', () => {
+  const D = { evap: WORLD_DEFAULTS.evapPerS };
+  const normal = rig({ soil: 25, ...D });
+  normal.until(() => normal.a.state === 'IDLE' && normal.a.stats.pulses > 0, 600000);
+  assert.equal(normal.a.lockReason, LOCK.NONE);
+  assert.ok(normal.w.bulk >= S.wetOff && normal.w.spillMl === 0);
+  const empty = rig({ soil: 20, tank: 0, ...D });
+  empty.until(() => empty.a.state === 'LOCKED', 120000);
+  assert.equal(empty.a.lockReason, LOCK.NO_RESPONSE);
+  const weak = rig({ soil: 30, ...D });
+  weak.w.pumpStrength = WEAK_PUMP;
+  weak.until(() => weak.a.state === 'LOCKED', 1200000);
+  assert.equal(weak.a.lockReason, LOCK.TIMEOUT, 'the weak pump of the page must reach the time limit, not the no-response check');
+  assert.equal(weak.pumpMs, S.maxWaterTotalMs);
 });
 
 test('stop: pump and LED off and the program does not run until setup() again', () => {
