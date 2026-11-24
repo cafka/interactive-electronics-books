@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Interactive Electronics Books</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%23141c38%27/%3E%3Cpath d=%27M6 9c3-1.6 7-1.6 10 0 3-1.6 7-1.6 10 0v14c-3-1.6-7-1.6-10 0-3-1.6-7-1.6-10 0z%27 fill=%27%23f3ebd6%27 stroke=%27%23d8b25a%27 stroke-width=%271.6%27/%3E%3Ccircle cx=%2716%27 cy=%2713%27 r=%273.2%27 fill=%27%23ff5a4a%27/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.js" } }
+  </script>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="scene" aria-label="3D book with a Raspberry Pi 5, breadboard, LED and resistor"></canvas>
+    <div id="labels" aria-hidden="true"></div>
+  </div>
+
+  <section id="library" class="library" aria-labelledby="libTitle">
+    <p class="eyebrow">Interactive electronics books</p>
+    <h1 id="libTitle">Library</h1>
+    <p class="lib-sub">Choose a book. Each one has its own board, chapters, circuits and code.</p>
+    <div class="lib-cards" id="libCards" role="list"></div>
+    <p class="lib-status" id="libStatus" role="status" aria-live="polite"></p>
+  </section>
+  <button id="libraryBtn" class="library-btn" hidden title="Back to the library of books">
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 4v16M10 4v16M15.5 5.5l4 .9-3.4 13.6-4-1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    Library
+  </button>
+
+  <div id="intro">
+    <p class="eyebrow" id="introEyebrow">An interactive science book</p>
+    <button id="openBtn" class="btn-open">Open the book</button>
+    <p class="hint">Drag to rotate · Scroll to zoom</p>
+  </div>
+
+  <div id="loadError" hidden>
+    <h2>WebGL is not available</h2>
+    <p>This book needs WebGL. Please use a recent version of Google Chrome with hardware acceleration enabled.</p>
+  </div>
+
+  <aside id="panel" aria-label="Lab notebook">
+    <header>
+      <p class="eyebrow" id="lessonChapter">Chapter 1 · GPIO output</p>
+      <h1 id="lessonTitle">Light an LED</h1>
+      <button id="closeBookBtn" class="link-btn" title="Close the book">Close book</button>
+      <div class="header-actions">
+        <button id="readBtn" class="read-btn" title="Read the left page as plain text">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 5.5C5.5 4 9 4 12 5.5c3-1.5 6.5-1.5 9 0V19c-2.5-1.5-6-1.5-9 0-3-1.5-6.5-1.5-9 0z M12 5.5V19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+          Read page
+        </button>
+        <button id="leftPageBtn" class="read-btn alt" title="Look straight at the left page of the 3D book">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          Left page view
+        </button>
+      </div>
+    </header>
+
+    <nav class="pager" aria-label="Lesson navigation">
+      <button id="prevBtn" class="btn pager-btn" aria-label="Previous lesson">← Previous</button>
+      <div id="pageInfo" class="page-info" aria-live="polite"></div>
+      <button id="nextBtn" class="btn pager-btn" aria-label="Next lesson">Next →</button>
+    </nav>
+
+    <nav class="tabs" role="tablist">
+      <button role="tab" class="tab-btn active" data-tab="sim" aria-selected="true">Simulate</button>
+      <button role="tab" class="tab-btn" data-tab="code" aria-selected="false">Python</button>
+      <button role="tab" class="tab-btn" data-tab="how" aria-selected="false">How it works</button>
+    </nav>
+
+    <div class="tab-body" id="tabBody">
+      <section class="tab active" data-tab="sim" id="tabSim"></section>
+      <section class="tab" data-tab="code" id="tabCode"></section>
+      <section class="tab" data-tab="how" id="tabHow"></section>
+    </div>
+    <footer class="panel-foot">Web simulation: nothing here touches real hardware. ← → keys turn the page.</footer>
+  </aside>
+  <button id="cornerNext" class="corner-tag next" hidden>Next <span aria-hidden="true">›</span></button>
+  <button id="cornerPrev" class="corner-tag prev" hidden><span aria-hidden="true">‹</span> Previous</button>
+
+  <div id="leftBar" class="left-bar" hidden role="toolbar" aria-label="Left page view">
+    <span class="left-bar-title">Left page view</span>
+    <button id="leftNotebook" class="left-bar-btn">Hide notebook</button>
+    <button id="leftBack" class="left-bar-btn primary">← Back to previous view</button>
+  </div>
+  <div id="reader" hidden role="dialog" aria-modal="true" aria-labelledby="readerTitle">
+    <div class="reader-bar">
+      <button id="readerBack" class="reader-back">← Back to the book</button>
+      <span id="readerTitle" class="reader-title"></span>
+    </div>
+    <div class="reader-scroll" id="readerScroll" tabindex="0"></div>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "interactive-electronics-books",
+  "version": "0.1.0",
+  "description": "Library of interactive 3D electronics books: Raspberry Pi 5 (4 chapters) and ESP32 (open door alarm).",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test tests/traffic.test.mjs tests/doorAlarm.test.mjs"
+  }
+}
