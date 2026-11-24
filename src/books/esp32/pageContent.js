@@ -88,3 +88,86 @@ export const ESP32_DOOR_PAGE = {
     { type: 'p', text: 'Low voltage only, from USB. Do not connect this to mains power. A breadboard is for learning, not for a permanent or damp installation.' },
   ],
 };
+
+/* ------------------------------------------------------------------ chapter 2: smart plant watering */
+const vres = (x, y, w = 18, h = 40) => `<rect x="${x - w / 2}" y="${y}" width="${w}" height="${h}" rx="3"/>`;
+
+const plantSchematic = svgWrap(860, 500, `
+  <g fill="none" stroke="${INK}" stroke-width="4" stroke-linejoin="round" stroke-linecap="round">
+    <!-- soil sensor -->
+    <rect x="120" y="14" width="190" height="96" rx="12"/>
+    <path d="M60 46 H120"/><path d="M215 110 V124"/><path d="${gnd(215, 124)}"/>
+    <path d="M310 70 H500"/><path d="M420 70 V84"/>${vres(420, 84, 18, 36)}<path d="M420 120 V130"/><path d="${gnd(420, 130)}"/>
+    <!-- pump branch -->
+    <path d="M60 300 H110"/><path d="${zig(110, 300)}"/><path d="M194 300 H325"/>
+    <path d="M250 300 V322"/>${vres(250, 322, 18, 36)}<path d="M250 358 V368"/><path d="${gnd(250, 368)}"/>
+    <path d="M325 283 V317"/><path d="M345 273 V290 M345 296 V304 M345 310 V327"/><path d="M345 273 V258 H430 V266"/>
+    <path d="M345 327 V352"/><path d="${gnd(345, 352)}"/>
+    <path d="M345 300 H337"/>
+    <path d="M360 190 H520"/><path d="M430 190 V212"/><circle cx="430" cy="238" r="26"/><path d="M430 264 V258"/>
+    <path d="M500 190 V214 M486 214 H514 M486 246 H514 L500 214 Z M500 246 V258 H430"/>
+    <path d="M580 190 V228 M566 228 H594 M566 240 H594 M580 240 V300"/><path d="${gnd(580, 300)}"/>
+  </g>
+  <path d="M345 310 l-10 -4 v8 z" fill="${INK}"/>
+  <g fill="none" stroke="${INK}" stroke-width="4" stroke-linejoin="round" stroke-linecap="round">
+    <!-- LED branch -->
+    <path d="M60 440 H110"/><path d="${zig(110, 440)}"/><path d="M194 440 H240 M240 420 V460 L272 440 Z M272 420 V460 M272 440 H330 V458"/><path d="${gnd(330, 458)}"/>
+    <!-- button branch -->
+    <path d="M480 440 H560"/><circle cx="560" cy="440" r="6"/><circle cx="640" cy="440" r="6"/><path d="M560 440 L632 416"/><path d="M646 440 H700 V458"/><path d="${gnd(700, 458)}"/>
+  </g>
+  <g fill="${INK}"><circle cx="60" cy="46" r="7"/><circle cx="500" cy="70" r="7"/><circle cx="60" cy="300" r="7"/><circle cx="250" cy="300" r="5"/><circle cx="430" cy="258" r="5"/><circle cx="500" cy="190" r="5"/><circle cx="430" cy="190" r="5"/><circle cx="580" cy="190" r="5"/><circle cx="60" cy="440" r="7"/><circle cx="480" cy="440" r="7"/><circle cx="420" cy="70" r="5"/></g>
+  <g fill="${INK}" font-size="20" font-weight="600">
+    <text x="48" y="38" text-anchor="end">3V3</text>
+    <text x="215" y="46" text-anchor="middle">capacitive soil</text><text x="215" y="70" text-anchor="middle">moisture sensor</text><text x="215" y="94" text-anchor="middle" font-size="16" opacity="0.7">VCC · AOUT · GND</text>
+    <text x="518" y="76">IO34 (ADC)</text><text x="440" y="108">100 kΩ</text>
+    <text x="48" y="308" text-anchor="end">IO25</text><text x="152" y="348" text-anchor="middle">100 Ω</text><text x="270" y="346">10 kΩ</text>
+    <text x="300" y="268" text-anchor="end">N-MOSFET</text><text x="300" y="290" text-anchor="end" font-size="16" opacity="0.7">logic level</text>
+    <text x="474" y="244" text-anchor="end">pump</text><text x="520" y="236" font-size="16" opacity="0.7">flyback</text><text x="520" y="256" font-size="16" opacity="0.7">diode</text>
+    <text x="610" y="226">470 µF</text><text x="540" y="182" text-anchor="end">5V</text>
+    <text x="48" y="448" text-anchor="end">IO26</text><text x="152" y="488" text-anchor="middle">330 Ω</text><text x="256" y="484" text-anchor="middle">LED</text>
+    <text x="468" y="448" text-anchor="end">IO27</text><text x="600" y="408" text-anchor="middle">button</text>
+  </g>
+  <g fill="${ACCENT}" font-size="17" font-weight="700"><text x="402" y="20" text-anchor="middle">0 V if the wire is off</text><text x="600" y="340" font-size="16"> </text></g>
+  <g fill="${INK}" font-size="17" opacity="0.75"><text x="362" y="340">source to GND</text><text x="352" y="196" text-anchor="end">pump: 5 V from USB</text></g>`,
+'Schematic: 3.3 V powers a soil sensor whose output goes to IO34 with a 100 kilohm pull-down; IO25 drives a logic-level MOSFET through 100 ohms with a 10 kilohm pull-down; the MOSFET switches a pump from 5 volts, with a diode across the pump and a capacitor on the supply; IO26 drives an LED through 330 ohms; IO27 reads a button to ground');
+
+const plantStates = svgWrap(860, 210, `
+  <defs><marker id="ap" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="${INK}"/></marker></defs>
+  <g stroke="${INK}" stroke-width="3" fill="none">
+    <rect x="10" y="30" width="180" height="74" rx="14" fill="#e9e1c8"/>
+    <rect x="236" y="30" width="180" height="74" rx="14" fill="#c9e3f2"/>
+    <rect x="462" y="30" width="180" height="74" rx="14" fill="#d9e3c4"/>
+    <rect x="688" y="30" width="162" height="74" rx="14" fill="#f3b7a8"/>
+    <path d="M192 67 H234" marker-end="url(#ap)"/><path d="M418 67 H460" marker-end="url(#ap)"/>
+    <path d="M552 106 V158 H100 V108" marker-end="url(#ap)"/>
+    <path d="M644 54 H686" marker-end="url(#ap)" stroke-dasharray="6 5"/>
+    <path d="M520 28 V12 H326 V28" marker-end="url(#ap)"/>
+    <path d="M769 106 V186 H100" stroke-dasharray="6 5"/>
+  </g>
+  <g fill="${INK}" font-size="21" font-weight="700" text-anchor="middle">
+    <text x="100" y="62">IDLE</text><text x="326" y="62">WATERING</text><text x="552" y="62">SOAKING</text><text x="769" y="62">LOCKED</text>
+  </g>
+  <g fill="${INK}" font-size="15" text-anchor="middle">
+    <text x="100" y="86">pump off · reads</text><text x="326" y="86">pump on · 3 s</text><text x="552" y="86">pump off · 60 s</text><text x="769" y="86">pump off · saved</text>
+    <text x="213" y="58">dry</text><text x="439" y="58">3 s</text>
+    <text x="326" y="6">gaining but still dry: next pulse</text>
+    <text x="326" y="152">wet enough: back to IDLE</text>
+    <text x="436" y="203" font-size="14">any fault: sensor, no response, time limit. Button clears it.</text>
+  </g>`,
+'States: idle waits for dry soil; watering pumps three seconds; soaking waits sixty seconds then measures; if wet enough it returns to idle, if gaining but dry it pumps again, and any fault leads to locked, which only the button clears');
+
+export const ESP32_PLANT_PAGE = {
+  eyebrow: 'CHAPTER 2  ·  MEASURE, DECIDE, SWITCH',
+  title: ['Smart Plant', 'Watering'],
+  pageNumber: 3,
+  blocks: [
+    { type: 'p', text: 'A capacitive sensor measures the soil. When it is dry the ESP32 runs a small pump in 3 s pulses, waits 60 s for the water to spread, and measures again. Any fault switches the pump off and keeps it off until you press a button.' },
+    { type: 'h', text: 'YOU WILL NEED' },
+    { type: 'bullets', items: ['ESP32-DevKitC, USB cable and a 5 V 2 A charger', 'Capacitive soil sensor, mini 5 V pump, tube, tank, pot', 'Logic-level N-MOSFET (IRLZ44N), 1N5819 diode, 470 µF', 'Resistors 100 Ω, 330 Ω, 10 kΩ, 100 kΩ; LED; button'] },
+    { type: 'h', text: 'SCHEMATIC (GPIO NAMES)' },
+    { type: 'svg', svg: plantSchematic, w: 860, h: 500 },
+    { type: 'h', text: 'STATES' },
+    { type: 'svg', svg: plantStates, w: 860, h: 210 },
+    { type: 'p', text: 'Low voltage only (5 V from USB). Keep water away from the breadboard: tank and pot lower than the electronics, a tray under the pot, no mains power.' },
+  ],
+};

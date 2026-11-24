@@ -57,7 +57,7 @@ function plugAt(hole2) {
 }
 
 /** A two-wire cable of the sensor: tube from the sensor to a plug in the breadboard. */
-function buildCable(points, endHole, color) {
+export function buildCable(points, endHole, color) {
   const root = new THREE.Group();
   const end = V(endHole.x, BH + 0.5, endHole.z);
   const curve = new THREE.CatmullRomCurve3([...points, end.clone().add(V(0, 0.45, 0)), end], false, 'centripetal');
@@ -68,7 +68,7 @@ function buildCable(points, endHole, color) {
   root.add(plug);
   return { root, curve, tube, plug, wireMat };
 }
-const cablePiece = (c, delay, dur = 0.8) => {
+export const cablePiece = (c, delay, dur = 0.8) => {
   const count = c.tube.geometry.index.count;
   return {
     delay, dur,
@@ -80,7 +80,7 @@ const cablePiece = (c, delay, dur = 0.8) => {
   };
 };
 
-function labelTexture(text, w, h, bg, fg, size) {
+export function labelTexture(text, w, h, bg, fg, size) {
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
