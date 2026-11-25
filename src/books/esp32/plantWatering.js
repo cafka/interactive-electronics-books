@@ -223,7 +223,7 @@ export class PlantWatering {
     this.percentBeforePulse = 0;
     this.resetInputs(now);
     this.lockReason = this.io.loadLock();
-    this.state = 'IDLE';
+    // state is still 'STOPPED' here, so the first 'state' event says where the program came from
     if (this.lockReason !== LOCK.NONE) this.enterState('LOCKED', now);
     else this.enterState('IDLE', now);
   }

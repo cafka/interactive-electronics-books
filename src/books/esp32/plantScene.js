@@ -47,7 +47,7 @@ const rad = (d) => (d * Math.PI) / 180;
 export const TK = V(9.85, 0, -2.45); // tank centre
 const TKD = { w: 2.5, d: 1.7, h: 1.7 };
 const WATER_MAX = 1.5; // height of a full tank
-export const PT = V(9.85, 0, -5.5); // pot centre
+export const PT = V(9.55, 0, -5.25); // pot centre (kept inside the page edge, x <= 10.7, z >= -6.4)
 const POT = { top: 1.15, bottom: 0.85, h: 2.0, y: 0.1 };
 const SOIL_TOP = 1.9;
 const SENSOR_AT = V(PT.x + 0.7, 0, PT.z + 0.15);
@@ -332,7 +332,7 @@ export function buildPlantScene() {
 
   const hosePts = [
     V(PUMP_AT.x - 0.05, 0.9, PUMP_AT.z), V(PUMP_AT.x - 0.1, 1.5, PUMP_AT.z - 0.1), V(PUMP_AT.x - 0.1, 2.15, PUMP_AT.z - 0.35),
-    V(9.7, 2.5, -3.5), V(9.5, 2.55, -4.5), V(HOSE_END.x, 2.45, -5.0), V(HOSE_END.x, HOSE_END.y, HOSE_END.z),
+    V(9.7, 2.5, -3.5), V(9.4, 2.55, -4.2), V(HOSE_END.x, 2.45, HOSE_END.z - 0.1), V(HOSE_END.x, HOSE_END.y, HOSE_END.z),
   ];
   const hoseCurve = new THREE.CatmullRomCurve3(hosePts, false, 'centripetal');
   const hoseMat = new THREE.MeshStandardMaterial({ color: '#d7edf5', transparent: true, opacity: 0.55, roughness: 0.2, depthWrite: false });
@@ -546,7 +546,7 @@ export function buildPlantScene() {
     setPop: applyPop,
     hitMeshes: () => hit,
     anchors: {
-      esp: V(EC.x - 0.6, ESP_TOP + 0.5, EC.z - 0.6),
+      esp: V(EC.x + 1.2, ESP_TOP + 0.5, EC.z - 1.1), // on the module side, away from the J2 pin labels
       pin: {
         sensor: V(espPin('IO34').x, 1.35, espPin('IO34').z), pump: V(espPin('IO25').x, 1.35, espPin('IO25').z), led: V(espPin('IO26').x, 1.35, espPin('IO26').z),
         button: V(espPin('IO27').x, 1.35, espPin('IO27').z), v3: V(espPin('3V3').x, 1.35, espPin('3V3').z), gnd: V(espPin('GND').x, 1.35, espPin('GND').z), v5: V(espPin('5V').x, 1.35, espPin('5V').z),

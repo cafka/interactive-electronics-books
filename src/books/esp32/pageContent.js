@@ -161,13 +161,13 @@ export const ESP32_PLANT_PAGE = {
   title: ['Smart Plant', 'Watering'],
   pageNumber: 3,
   blocks: [
-    { type: 'p', text: 'A capacitive sensor measures the soil. When it is dry the ESP32 runs a small pump in 3 s pulses, waits 60 s for the water to spread, and measures again. Any fault switches the pump off and keeps it off until you press a button.' },
-    { type: 'h', text: 'YOU WILL NEED' },
-    { type: 'bullets', items: ['ESP32-DevKitC, USB cable and a 5 V 2 A charger', 'Capacitive soil sensor, mini 5 V pump, tube, tank, pot', 'Logic-level N-MOSFET (IRLZ44N), 1N5819 diode, 470 µF', 'Resistors 100 Ω, 330 Ω, 10 kΩ, 100 kΩ; LED; button'] },
+    { type: 'p', text: 'A sensor measures the soil. When it is dry the ESP32 pumps for 3 s, waits 60 s and measures again. Any fault locks the pump off until you press the button.' },
+    { type: 'h', text: 'YOU WILL NEED (FULL LIST IN THE NOTEBOOK)' },
+    { type: 'bullets', items: ['ESP32-DevKitC, 5 V 2 A charger, LED, button', 'Soil sensor, 5 V pump, IRLZ44N, 1N5819, 470 µF'] },
     { type: 'h', text: 'SCHEMATIC (GPIO NAMES)' },
     { type: 'svg', svg: plantSchematic, w: 860, h: 500 },
     { type: 'h', text: 'STATES' },
     { type: 'svg', svg: plantStates, w: 860, h: 210 },
-    { type: 'p', text: 'Low voltage only (5 V from USB). Keep water away from the breadboard: tank and pot lower than the electronics, a tray under the pot, no mains power.' },
+    { type: 'p', text: '5 V only. Water below the electronics, a tray under the pot.' },
   ],
 };

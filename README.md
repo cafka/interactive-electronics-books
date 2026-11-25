@@ -5,13 +5,13 @@ A small library of interactive 3D books, one per board. The engine (page turn, n
 | Book | Chapters |
 | --- | --- |
 | **Raspberry Pi 5** (Python, `gpiozero`) | 1 Light an LED · 2 Control an LED with a Button · 3 LED Brightness with PWM · 4 Traffic Light with Pedestrian Button |
-| **ESP32** (Arduino C++, ESP32-DevKitC with ESP32-WROOM-32E) | 1 Open Door Alarm (reed switch and magnet, LED, buzzer, 30 s timer) |
+| **ESP32** (Arduino C++, ESP32-DevKitC with ESP32-WROOM-32E) | 1 Open Door Alarm (reed switch and magnet, LED, buzzer, 30 s timer) · 2 Smart Plant Watering (soil sensor, ADC, MOSFET and pump, state machine with fault lock) |
 
 Open the site and choose a book in the **Library**. The **Library** button (top left) goes back to it.
 
 **Live library:** <https://cafka.github.io/interactive-electronics-books/>
 
-Direct links: Raspberry Pi chapter 3 `?open=1&lesson=3` (or `?book=raspberry-pi&open=1&lesson=3`), ESP32 chapter 1 `?book=esp32&open=1&lesson=1`.
+Direct links: Raspberry Pi chapter 3 `?open=1&lesson=3` (or `?book=raspberry-pi&open=1&lesson=3`), ESP32 chapter 1 `?book=esp32&open=1&lesson=1`, ESP32 chapter 2 `?book=esp32&open=1&lesson=2`.
 
 Stack: plain ES modules + Three.js r170 (vendored in `vendor/`, no CDN, no paid APIs, works offline).
 This is a web simulation: it never touches real GPIO.
@@ -92,6 +92,16 @@ python3 python/traffic_light.py
 - Checks that ran without hardware: `npm test` (door logic: the four guided cases, start with the door open, debounce, `millis()` wrap, constants and pins read from the sketch) and `tests/arduino/run.ps1` (compiles the real `.ino` against a mock `Arduino.h` and runs it; needs g++, clang++ or the Visual Studio Build Tools).
 - **Needs real parts:** the magnet distance that closes the reed contact, buzzer loudness and real current, the 2N3904 operating point, and the bounce of the real switch. Low-voltage USB only; a breadboard is not a permanent or damp installation.
 
+## ESP32 chapter 2: Smart Plant Watering
+
+- A capacitive soil sensor on **IO34** (ADC1, 11 dB, powered from 3V3, 100 kΩ pull-down), a 5 V mini pump switched by a logic-level N-MOSFET (IRLZ44N) on **IO25** (100 Ω gate resistor, 10 kΩ gate pull-down, 1N5819 flyback diode, 470 µF on 5 V), a status LED on **IO26** and a lock-clear button on **IO27** (`INPUT_PULLUP`).
+- States: `IDLE` → `WATERING` (3 s pulse) → `SOAKING` (60 s) → measure again; `LOCKED` on a fault. Faults: invalid sensor reading for 2 s (code 1), soil not wetter after a pulse (code 2: empty tank, blocked hose, broken pump), 24 s of pump time in one episode (code 3). The lock is saved in flash (`Preferences`) and only the button clears it. The LED blinks the code.
+- The sketch is `arduino/plant_watering/plant_watering.ino` (the only copy; the simulation reads its constants). `src/books/esp32/plantWatering.js` is a port of its logic, `plantWorld.js` simulates soil, tank, pump and sensor faults, `plantParts.js` holds the parts list, connection table, fault table and electrical check that the notebook and the tests share.
+- The notebook has controls for soil moisture, tank level, both thresholds, speed (1× to 200×), sensor wire off or shorted, pull-down fitted or not, noise, blocked hose and weak pump; six guided experiments; a moisture plot; and a calibration bench. In the 3D scene, click the red button (press) or the soil sensor (pull its cable).
+- URL: `?book=esp32&open=1&lesson=2`.
+- Checks that ran without hardware: `npm test` (`tests/plantWatering.test.mjs`: normal episode, hysteresis, filter and spikes, each fault, lock saved across a reboot, button debounce, `millis()` wrap, LED codes, pump never on outside `WATERING`, the page's guided scenarios, the electrical arithmetic and the data tables). The pages were also loaded in headless Chrome (software WebGL) with no console errors. **Not done:** the sketch has not been compiled with the ESP32 Arduino core or run on a board, and nothing was measured on real parts.
+- **Needs real parts:** sensor calibration (`RAW_DRY`, `RAW_WET`), pump flow and current, the soak time for your pot, and the supply (use a 5 V charger of at least 1.5 A). Water must stay below and away from the electronics.
+
 ## Adding a book
 
 Create `src/books/<id>/index.js` with `{ id, name, board, title, blurb, eyebrow, coverColor, lessons, paintCover, coverTexture, canvasLabel }` and add it to `src/books/index.js`. A chapter may set `codeTab` (the code tab label, default `Python`). A book is built the first time it is chosen.
@@ -103,8 +113,9 @@ Create `src/books/<id>/index.js` with `{ id, name, board, title, blurb, eyebrow,
 
 ## Files
 
-- `src/books/`: book registry; `raspberry-pi/` (uses `src/lessons/`) and `esp32/` (`board.js` DevKitC model, `scene.js`, `chapter1.js`, `doorAlarm.js`, `pageContent.js`, `cover.js`)
-- `arduino/door_alarm/door_alarm.ino`, `tests/doorAlarm.test.mjs`, `tests/arduino/` (compiles the sketch with a mock `Arduino.h`)
+- `src/books/`: book registry; `raspberry-pi/` (uses `src/lessons/`) and `esp32/` (`board.js` DevKitC model, `scene.js`, `chapter1.js`, `doorAlarm.js`, `plantScene.js`, `chapter2.js`, `plantWatering.js`, `plantWorld.js`, `plantParts.js`, `pageContent.js`, `cover.js`)
+- `arduino/door_alarm/door_alarm.ino`, `tests/doorAlarm.test.mjs`, `tests/arduino/` (compiles the door sketch with a mock `Arduino.h`)
+- `arduino/plant_watering/plant_watering.ino`, `tests/plantWatering.test.mjs`
 - `tools/publish-public.ps1`: updates the public copy (see Publishing)
 - `index.html`, `styles.css`: page and notebook UI
 - `src/main.js`: scene, camera, input, page-turn state machine

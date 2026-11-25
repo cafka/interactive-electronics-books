@@ -311,7 +311,7 @@ export default {
     let world = new PlantWorld();
     let buttonDown = false;
     let speed = 10;
-    let devMs = 0, passMs = 0, pumpMs = 0, lastHist = -1e9;
+    let devMs = 0, passMs = 0, pumpMs = 0, lastHist = -1e9, lockedAt = 0;
     const clockBase = 0;
     let popT = 0, autoStart = false, ui = null;
     let pickWhat = null, pressMoved = false;
@@ -339,9 +339,10 @@ export default {
           scene.pulse('pump', '#7be3a0');
         } else if (ev.to === 'SOAKING') log(`>>> ${t}  state: WATERING → SOAKING   # pump off, wait ${S.soakMs / 1000} s (pump total ${fmtS(ctrl.pumpTotalMs)})`, 'p');
         else if (ev.to === 'IDLE' && ev.from === 'SOAKING') log(`>>> ${t}  state: SOAKING → IDLE   # wet enough`, 'p');
-        else if (ev.to === 'IDLE') log(`>>> ${t}  state: ${ev.from} → IDLE`, 'p');
+        else if (ev.to === 'IDLE' && ev.from !== 'STOPPED') log(`>>> ${t}  state: ${ev.from} → IDLE`, 'p');
         else if (ev.to === 'LOCKED' && ev.from === 'STOPPED') log(`# setup(): a lock saved in flash is still there: ${LOCK_TEXT[ctrl.lockReason]}`, 'c');
       } else if (ev.type === 'lock') {
+        lockedAt = passMs;
         log(`>>> ${fmtS(passMs)}  LOCKED: ${LOCK_TEXT[ev.reason]} (code ${ev.reason}, saved in flash)`, 'p');
         scene.pulse('led', '#ff7a5a');
       } else if (ev.type === 'check') {
@@ -382,13 +383,14 @@ export default {
     }
 
     /* ---------- guided experiments ---------- */
+    // experiment clocks use passMs (the last simulated millisecond that really ran)
     const wait = (ms) => (st) => {
-      st.until ??= devMs + ms;
-      return devMs >= st.until;
+      st.until ??= passMs + ms;
+      return passMs >= st.until;
     };
     const waitFor = (fn, maxMs) => (st) => {
-      st.until ??= devMs + maxMs;
-      return fn() || devMs >= st.until;
+      st.until ??= passMs + maxMs;
+      return fn() || passMs >= st.until;
     };
     const doIt = (fn) => (st, mem) => (fn(mem), true);
     const fresh = (opts, thr) => doIt((mem) => {
@@ -421,10 +423,10 @@ export default {
           `Failed: state ${st()}, reason ${LOCK_NAME[ctrl.lockReason]}, pump ${fmtS(pumpMs)}.`),
       ],
       () => [
-        fresh({ bulk: 50 }), wait(5000), doIt((mem) => { world.sensor = 'disconnected'; mem.t0 = devMs; ui?.syncControls(); }),
+        fresh({ bulk: 50 }), wait(5000), doIt((mem) => { world.sensor = 'disconnected'; mem.t0 = passMs; ui?.syncControls(); }),
         waitFor(() => st() === 'LOCKED', 10000),
         (s0, mem) => finish(st() === 'LOCKED' && ctrl.lockReason === LOCK.SENSOR && !ctrl.out.pump,
-          `Passed: LOCKED with code 1 ${fmtS(devMs - mem.t0)} after the wire came off. The 100 kΩ pulled the pin to about 0.`,
+          `Passed: LOCKED with code 1 ${fmtS(lockedAt - mem.t0)} after the wire came off. The 100 kΩ pulled the pin to about 0.`,
           `Failed: state ${st()}, reason ${LOCK_NAME[ctrl.lockReason]}.`),
       ],
       () => [
@@ -478,9 +480,9 @@ export default {
     /* ---------- labels ---------- */
     const A = scene.anchors;
     const labels = [
-      { id: 'esp', title: 'ESP32-DevKitC', sub: 'WROOM-32E module', at: A.esp, side: 'left', hideNarrow: true },
+      { id: 'esp', title: 'ESP32-DevKitC', sub: 'WROOM-32E module', at: A.esp, side: 'right', hideNarrow: true },
       { id: 'io34', cls: 'compact', title: 'IO34 · sensor ADC', sub: () => `<span class="val">${ctrl.running ? ctrl.lastRaw : '–'} / 4095</span>`, at: A.pin.sensor, side: 'left' },
-      { id: 'io25', cls: 'compact', title: 'IO25 · MOSFET gate', sub: () => `<span class="val">${hl(ctrl.out.pump)}</span>`, at: A.pin.pump, side: 'left', hideNarrow: true },
+      { id: 'io25', cls: 'compact', title: 'IO25 · MOSFET gate', sub: () => `<span class="val">${hl(ctrl.out.pump)}</span>`, at: A.pin.pump, side: 'right', hideNarrow: true },
       { id: 'fet', cls: 'compact', title: 'IRLZ44N', sub: () => `<span class="val">${ctrl.out.pump ? 'on: pump current flows' : 'off'}</span>`, at: A.mosfet, side: 'right' },
       { id: 'diode', title: '1N5819', sub: 'flyback diode', at: A.diode, side: 'right', hideNarrow: true },
       { id: 'cap', title: '470 µF', sub: 'covers the pump start', at: A.cap, side: 'left', hideNarrow: true },
@@ -835,11 +837,17 @@ export default {
         if (ctrl.running) {
           devMs += dt * 1000 * speed;
           const target = Math.floor(devMs);
-          while (passMs < target) {
+          while (passMs < target && ctrl.running) {
             passMs++;
             ctrl.loop(now());
             if (ctrl.out.pump) pumpMs++;
             if (passMs % 10 === 0) world.step(0.01, ctrl.out.pump);
+            if (guided) {
+              // experiments are stepped every simulated millisecond, so their timing does not depend on the frame rate
+              const before = passMs;
+              stepGuided();
+              if (passMs < before) break; // a step restarted the program
+            }
           }
           if (devMs - lastHist >= 250) {
             lastHist = devMs;
