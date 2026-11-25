@@ -14,7 +14,7 @@ export const FEEDER_DEFAULTS = {
   sdaPin: 21, sclPin: 22, hxDtPin: 19, hxSckPin: 18, beamPin: 27, lidPin: 26, estopPin: 25, buttonPin: 13, oePin: 33, ledPin: 4,
   chBase: 0, chShoulder: 1, chElbow: 2, chWrist: 3, chDoor: 4,
   h0: 90, l1: 120, l2: 120, l3: 70,
-  q0Min: -90, q0Max: 90, q1Min: 10, q1Max: 160, q2Min: -150, q2Max: 0, q3Min: -95, q3Max: 95,
+  q0Min: -90, q0Max: 90, q1Min: 10, q1Max: 160, q2Min: -150, q2Max: 0, q3Min: -90, q3Max: 90,
   q0Zero: 90, q1Zero: 0, q2Zero: 180, q3Zero: 90, q0Dir: 1, q1Dir: 1, q2Dir: 1, q3Dir: 1,
   servoUsMin: 500, servoUsMax: 2500,
   homeQ0: 0, homeQ1: 110, homeQ2: -135, homeQ3: 40,

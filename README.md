@@ -5,13 +5,13 @@ A small library of interactive 3D books, one per board. The engine (page turn, n
 | Book | Chapters |
 | --- | --- |
 | **Raspberry Pi 5** (Python, `gpiozero`) | 1 Light an LED · 2 Control an LED with a Button · 3 LED Brightness with PWM · 4 Traffic Light with Pedestrian Button |
-| **ESP32** (Arduino C++, ESP32-DevKitC with ESP32-WROOM-32E) | 1 Open Door Alarm (reed switch and magnet, LED, buzzer, 30 s timer) · 2 Smart Plant Watering (soil sensor, ADC, MOSFET and pump, state machine with fault lock) |
+| **ESP32** (Arduino C++, ESP32-DevKitC with ESP32-WROOM-32E) | 1 Open Door Alarm (reed switch and magnet, LED, buzzer, 30 s timer) · 2 Smart Plant Watering (soil sensor, ADC, MOSFET and pump, state machine with fault lock) · 3 Smart Robotic Cat Feeder (4-DOF arm, PCA9685, load cell, kinematics, safety) |
 
 Open the site and choose a book in the **Library**. The **Library** button (top left) goes back to it.
 
 **Live library:** <https://cafka.github.io/interactive-electronics-books/>
 
-Direct links: Raspberry Pi chapter 3 `?open=1&lesson=3` (or `?book=raspberry-pi&open=1&lesson=3`), ESP32 chapter 1 `?book=esp32&open=1&lesson=1`, ESP32 chapter 2 `?book=esp32&open=1&lesson=2`.
+Direct links: Raspberry Pi chapter 3 `?open=1&lesson=3` (or `?book=raspberry-pi&open=1&lesson=3`), ESP32 chapter 1 `?book=esp32&open=1&lesson=1`, ESP32 chapter 2 `?book=esp32&open=1&lesson=2`, ESP32 chapter 3 `?book=esp32&open=1&lesson=3`.
 
 Stack: plain ES modules + Three.js r170 (vendored in `vendor/`, no CDN, no paid APIs, works offline).
 This is a web simulation: it never touches real GPIO.
@@ -105,6 +105,16 @@ python3 python/traffic_light.py
 - Checks that ran without hardware: `npm test` (`tests/plantWatering.test.mjs`: normal episode, hysteresis, filter and spikes, each fault, lock saved across a reboot, button debounce, `millis()` wrap, LED codes, pump never on outside `WATERING`, the page's guided scenarios, the electrical arithmetic and the data tables). The pages were also loaded in headless Chrome (software WebGL) with no console errors. **Not done:** the sketch has not been compiled with the ESP32 Arduino core or run on a board, and nothing was measured on real parts.
 - **Needs real parts:** sensor calibration (`RAW_DRY`, `RAW_WET`), pump flow and current, the soak time for your pot, and the supply (use a 5 V charger of at least 1.5 A). Water must stay below and away from the electronics.
 
+## ESP32 chapter 3: Smart Robotic Cat Feeder
+
+- A 4-joint arm (base, shoulder, elbow, wrist; links 90/120/120/70 mm) scoops dry food from a hopper with a spoon and pours a measured ration into Pancho's plate. ESP32 → I²C (**IO21** SDA, **IO22** SCL) → PCA9685 (0x40, OE on **IO33** with a 2.2 kΩ pull-up) → 3 × MG996R + 2 × MG90S (wrist, access door). Load cell + HX711 (**IO19** DT, **IO18** SCK) under the plate, INA219 (0x45) on the servo supply for jam detection, IR break beam at the access window (**IO27**), lid switch (**IO26**), E-stop second contact (**IO25**), button (**IO13**), LED (**IO4**). Servo power: separate 6 V 5 A supply → E-stop main contact → 3 A slow fuse → INA219 → PCA9685 V+, common ground.
+- States: `IDLE` (door open, arm off) → `DOOR_CLOSING` → `TARE` → `CYCLE` (to hopper, dip, scoop, lift, to plate, pour with the scale in the loop, weigh, more scoops if short, leftovers back to the hopper, home) → `DOOR_OPENING` → `IDLE`; `MANUAL` (joints or an x, y, z, pitch point through the inverse kinematics); `FAULT` on E-stop, lid, cat at the window, jam, bad load cell, empty hopper, unreachable target, blocked door or a cycle cut by a restart (`cycle` flag in flash). Recovery only by a long press with the cause gone (`RECOVERING`: empties the spoon, goes home slowly). Feeding needs a calibrated scale; a cooldown runs after every ration and every start.
+- The sketch is `arduino/cat_feeder/cat_feeder.ino` (constants read by the page). `catFeeder.js` is a port of its logic, `armKinematics.js` the forward/inverse kinematics and move planning, `feederWorld.js` the physical model (servos, door, food mass, load cell, sensors, faults), `feederParts.js` the parts, pins, connections and the torque/current checks, `feederScene.js` the 3D scene (the arm is turned by the simulated servo positions).
+- The notebook has automatic mode (ration, arm speed, feed, feed now, pause, stop, reset, hold button), tare and calibration with a 100 g weight, manual mode, a joint table (command, real servo, pulse), the mass balance, faults (cat, lid, E-stop, jam, door blocked, load cell off or frozen, power cut), six guided experiments and a spoon-height / weight plot. In the 3D scene click the E-stop, the blue button or Pancho.
+- URL: `?book=esp32&open=1&lesson=3`.
+- Checks that ran without hardware: `npm test` (`tests/catFeeder.test.mjs`: constants, pins, forward and inverse kinematics with the book's worked examples, impossible targets, waypoints inside the limits, torques, a full ration with mass conservation, speed limits, faults, no resume after a restart, cat presence, manual mode). The six guided experiments passed in headless Chrome (software WebGL) with no console errors. **Not done:** the sketch has not been compiled with the ESP32 core and the libraries, nothing was run on a board or measured on real parts.
+- **Needs real parts:** servo pulse limits, zeros and directions, link masses (torque), spoon capacity, load cell calibration, the normal servo current (`JAM_MA`), the input levels of the beam, lid and E-stop. This is a teaching design, not a certified safe device: do not use it unattended with an animal before building and testing it.
+
 ## Adding a book
 
 Create `src/books/<id>/index.js` with `{ id, name, board, title, blurb, eyebrow, coverColor, lessons, paintCover, coverTexture, canvasLabel }` and add it to `src/books/index.js`. A chapter may set `codeTab` (the code tab label, default `Python`). A book is built the first time it is chosen.
@@ -116,9 +126,10 @@ Create `src/books/<id>/index.js` with `{ id, name, board, title, blurb, eyebrow,
 
 ## Files
 
-- `src/books/`: book registry; `raspberry-pi/` (uses `src/lessons/`) and `esp32/` (`board.js` DevKitC model, `scene.js`, `chapter1.js`, `doorAlarm.js`, `plantScene.js`, `chapter2.js`, `plantWatering.js`, `plantWorld.js`, `plantParts.js`, `pageContent.js`, `cover.js`)
+- `src/books/`: book registry; `raspberry-pi/` (uses `src/lessons/`) and `esp32/` (`board.js` DevKitC model, `scene.js`, `chapter1.js`, `doorAlarm.js`, `plantScene.js`, `chapter2.js`, `plantWatering.js`, `plantWorld.js`, `plantParts.js`, `chapter3.js`, `catFeeder.js`, `armKinematics.js`, `feederWorld.js`, `feederParts.js`, `feederScene.js`, `pageContent.js`, `cover.js`)
 - `arduino/door_alarm/door_alarm.ino`, `tests/doorAlarm.test.mjs`, `tests/arduino/` (compiles the door sketch with a mock `Arduino.h`)
 - `arduino/plant_watering/plant_watering.ino`, `tests/plantWatering.test.mjs`
+- `arduino/cat_feeder/cat_feeder.ino`, `tests/catFeeder.test.mjs`
 - `tools/publish-public.ps1`: updates the public copy (see Publishing)
 - `index.html`, `styles.css`: page and notebook UI
 - `src/main.js`: scene, camera, input, page-turn state machine

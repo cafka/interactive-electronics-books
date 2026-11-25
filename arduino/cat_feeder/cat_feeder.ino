@@ -12,7 +12,9 @@
   Wiring (GPIO numbers):
     GPIO21 SDA, GPIO22 SCL -> PCA9685 (address 0x40) and INA219 (address 0x45: bridge its A0 and A1 pads,
                                because its default 0x40 is the PCA9685's)
-    GPIO33 -> PCA9685 OE (output enable, active LOW), 10 kohm pull-up to 3V3: outputs off while the ESP32 boots
+    GPIO33 -> PCA9685 OE (output enable, active LOW), 2.2 kohm pull-up to 3V3: outputs off while the ESP32 boots.
+              Some modules pull OE down on the board: measure OE at boot, it must read above 2.3 V.
+              (After its own power-up the PCA9685 sends no pulses until the sketch writes a channel.)
     PCA9685 channels: 0 base, 1 shoulder, 2 elbow, 3 wrist, 4 access door
     GPIO19 <- HX711 DT, GPIO18 -> HX711 SCK, HX711 VCC from 3V3
     GPIO27 <- IR break-beam receiver at the access window (INPUT_PULLUP, LOW = beam broken)
@@ -20,7 +22,8 @@
     GPIO25 <- second NC contact of the emergency stop to GND (INPUT_PULLUP, LOW = normal, HIGH = pressed or cut)
     GPIO13 <- push button to GND: short press = feed, long press = override cooldown / reset after a fault
     GPIO4  -> status LED through 330 ohm
-  Servo power: a separate 6 V 5 A supply -> E-stop main contact -> 5 A fuse -> PCA9685 V+ (1000 uF there).
+  Servo power: a separate 6 V 5 A supply -> E-stop main contact -> 3 A slow fuse -> INA219 shunt (0.1 ohm)
+               -> PCA9685 V+ (1000 uF there). The INA219 reads up to 3.2 A with that shunt.
   Common ground: the supply minus, the PCA9685 GND, the INA219 GND and the ESP32 GND are joined.
 
   The program never blocks (no delay()). It never resumes a cycle on its own after a fault or a restart.
@@ -72,8 +75,8 @@ const float Q1_MIN = 10;
 const float Q1_MAX = 160;
 const float Q2_MIN = -150;
 const float Q2_MAX = 0;
-const float Q3_MIN = -95;
-const float Q3_MAX = 95;
+const float Q3_MIN = -90;   // the wrist servo is centred (Q3_ZERO 90): +-90 is its whole 0..180 range
+const float Q3_MAX = 90;
 const float Q0_ZERO = 90;
 const float Q1_ZERO = 0;
 const float Q2_ZERO = 180;

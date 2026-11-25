@@ -295,9 +295,10 @@ export function buildFeederScene(settings) {
   /* ---------------- Pancho ---------------- */
   const cat = buildCat();
   cat.group.scale.setScalar(0.62);
-  cat.group.rotation.y = Math.PI; // facing the window (-x)
+  // the head is at local -x, so with no rotation Pancho faces the window (the chamber is at -x from him)
   root.add(cat.group);
-  const CAT_AWAY = V(14.2, -1.08, plateS.z + 1.2), CAT_AT = V(BOX.x1 + 1.25, -1.08, plateS.z);
+  const CAT_AWAY = V(12.9, -1.08, plateS.z - 3.4), CAT_AT = V(BOX.x1 + 1.25, -1.08, plateS.z);
+  cat.group.position.copy(CAT_AWAY);
   // a step for Pancho: the book stands on the desk, so the window is reached from a little box
   box(root, 1.6, 1.08, 2.6, std('#b48a5c', 0.85), BOX.x1 + 1.3, -0.54, plateS.z);
 
@@ -305,7 +306,10 @@ export function buildFeederScene(settings) {
   const elec = new THREE.Group();
   root.add(elec);
   box(elec, 10.4, 0.06, 5.6, std('#3d4651', 0.7), 5.5, 0.03, 3.9); // a base board for the modules
-  const esp = buildEsp32Board({ 'J2:IO21': '#7ad3ff', 'J2:IO22': '#7ad3ff', 'J2:IO19': '#c58cff', 'J2:IO18': '#c58cff' });
+  const esp = buildEsp32Board({
+    'J3:IO21': '#7ad3ff', 'J3:IO22': '#7ad3ff', 'J3:IO19': '#c58cff', 'J3:IO18': '#c58cff', 'J3:IO4': '#ffb020',
+    'J2:IO33': '#8bc34a', 'J2:IO27': '#ff6f61', 'J2:IO26': '#9e9e9e', 'J2:IO25': '#f2c230', 'J2:IO13': '#2f7be0',
+  });
   const ESP_AT = V(3.0, 0, 5.3);
   esp.group.position.copy(ESP_AT);
   elec.add(esp.group);
@@ -389,6 +393,10 @@ export function buildFeederScene(settings) {
     hxG: wire(espPin('GND', 'J2'), hxPin('GND'), '#3b3b44', 1.0),
     vplus: wire(V(10.2, 0.7, 4.7), pcaPin('V+'), '#d62f2f', 0.5, [V(10.1, 0.9, 3.85), V(9.6, 0.9, 3.0), V(8.6, 0.8, 3.4)]),
   };
+  // inputs and the LED: E-stop second contact (IO25), button (IO13), LED with its 330 ohm (IO4)
+  wire(espPin('IO25', 'J2'), V(9.5, 1.0, 2.2), '#f2c230', 1.6, [V(6.0, 2.2, 6.6), V(9.0, 2.0, 3.0)]);
+  wire(espPin('IO13', 'J2'), V(1.2, 0.5, 2.2), '#2f7be0', 1.2, [V(1.6, 1.5, 6.4)]);
+  wire(espPin('IO4', 'J3'), V(0.9, 0.4, 3.55), '#ffb020', 0.8);
   // E-stop and current sensor in the servo supply: PSU -> E-stop -> fuse -> INA219 -> PCA9685 V+
   wire(V(10.0, 0.7, 4.7), V(10.0, 1.0, 2.9), '#d62f2f', 0.3);
   wire(inaPin('V-'), V(9.4, 1.0, 2.2), '#d62f2f', 0.4);
@@ -437,6 +445,9 @@ export function buildFeederScene(settings) {
   const hit = [mushroom, btnCap, cat.group.children[0]];
   cat.group.children[0].userData.hit = 'cat';
   const tmp = new THREE.Vector3();
+  const spoonAt = new THREE.Vector3(), shoulderAt = new THREE.Vector3();
+  const CAT_LABEL = V(0.2, 1.5, 0);
+  const catAt = cat.group.position.clone().add(CAT_LABEL);
   const D2R = Math.PI / 180;
 
   return {
@@ -458,10 +469,10 @@ export function buildFeederScene(settings) {
       door: V(BOX.x1, winH + 0.2, plateS.z - 1.0),
       beam: V(BOX.x1 + 0.35, 1.3, winZ0 - 0.3),
       lid: V(BOX.x0 + 0.5, BOX.h + 0.2, BOX.z1 - 0.3),
-      cat: V(CAT_AT.x + 0.5, 1.2, plateS.z),
+      cat: catAt, // follows Pancho
       base: V(A.x - 0.9, 0.7, A.z + 0.6),
-      spoon: bowlAnchor,
-      shoulder: shoulder,
+      spoon: spoonAt, // follows the bowl (updated every frame)
+      shoulderAt,
     },
     /** Every frame. st: { q (4 joint deg), door (servo deg), hopperG, spoonG, plateG, floorG, flows, cat, lid, estop,
      *  led (0..1), button (0..1), target {x,y,z} mm or null, plan [{x,y,z}] mm, outputs (bool), current (0..1), fault (bool) } */
@@ -473,7 +484,7 @@ export function buildFeederScene(settings) {
       wrist.rotation.x = st.q[3] * D2R;
       // the door flap swings up into the chamber as it opens (servo 100 = closed, 10 = open)
       const openK = clamp01((s.doorClosedDeg - st.door) / (s.doorClosedDeg - s.doorOpenDeg));
-      doorPivot.rotation.z = openK * 1.45;
+      doorPivot.rotation.z = -openK * 1.45; // negative: the flap swings up into the chamber, not out at the cat
       lidPivot.rotation.x = st.lid ? -1.1 : 0;
       lidSwitch.material.color.set(st.lid ? '#c0392b' : '#2b2f36');
       // food: sizes from the masses of the physical model
@@ -500,7 +511,10 @@ export function buildFeederScene(settings) {
       floorFood.scale.y = 0.05 + 0.02 * Math.sqrt(st.floorG);
       // a stream of kibble under the bowl, only while food really falls out of the spoon
       const out = st.flows.toPlate + st.flows.toHopper + st.flows.toFloor;
+      root.updateMatrixWorld();
       bowlAnchor.getWorldPosition(tmp);
+      spoonAt.copy(tmp);
+      shoulder.getWorldPosition(shoulderAt);
       fallT += dt;
       for (let i = 0; i < 14; i++) {
         const k = ((fallT * 1.6 + i / 14) % 1);
@@ -538,6 +552,7 @@ export function buildFeederScene(settings) {
       beamMat.color.set(st.cat ? '#ff2a2a' : '#ff6b6b');
       const catTarget = st.cat ? CAT_AT : CAT_AWAY;
       cat.group.position.lerp(catTarget, 1 - Math.exp(-dt * 3));
+      catAt.copy(cat.group.position).add(CAT_LABEL);
       cat.head.rotation.z = Math.sin(time * 1.3) * 0.08;
       mushroom.position.y = st.estop ? 1.1 : 1.25;
       btnCap.position.y = 0.45 - 0.08 * st.button;

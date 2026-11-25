@@ -719,5 +719,14 @@ body.reading .library-btn { display: none; }
 .slider-ctl input[type=range] { width: 100%; margin: 6px 0 10px; }
 .hold-btn { width: 100%; margin: 4px 0 2px; touch-action: none; user-select: none; }
 .hold-btn.held { background: var(--ink); color: #f3ecd6; }
+/* ESP32 chapter 3: cat feeder */
+.btn-row .hold-btn { margin: 0; }
+.opt-inline { display: flex; align-items: center; gap: 6px; font-size: 12.5px; line-height: 1.2; cursor: pointer; }
+.opt-inline input { accent-color: var(--accent); width: 16px; height: 16px; flex: none; }
+.xyz-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 6px; font-size: 13px; }
+.xyz-row label { display: flex; align-items: center; gap: 4px; }
+.xyz-row input { width: 62px; padding: 4px 6px; border: 1px solid rgba(43,39,64,0.3); border-radius: 6px; background: #fffaf0; font: inherit; }
+.joint-table td:nth-child(n+2) { font-variant-numeric: tabular-nums; }
+.slider-ctl input[type=range]:disabled { opacity: 0.45; }
 .explain-list details, .steps-list details { margin-top: 4px; font-size: 12.5px; color: var(--ink-soft); }
 .explain-list summary, .steps-list summary { cursor: pointer; font-weight: 600; color: var(--teal); }

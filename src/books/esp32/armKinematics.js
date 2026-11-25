@@ -23,7 +23,7 @@ export const ARM = {
     [-90, 90], // q0 base
     [10, 160], // q1 shoulder
     [-150, 0], // q2 elbow
-    [-95, 95], // q3 wrist
+    [-90, 90], // q3 wrist (servo centred: its whole 0..180 range)
   ],
 };
 
