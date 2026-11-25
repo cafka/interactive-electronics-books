@@ -498,6 +498,8 @@ export function buildPlantScene() {
   }
   const fetGlow = sprite('#ff9a4a', 9, false);
   fetGlow.position.set(hole(16, 'f').x, BH + 1.1, hole(16, 'f').z + 0.3);
+  const flyGlow = sprite('#ffb04a', 9, false); // the flyback diode conducting for a moment
+  flyGlow.position.set(hole(18, 'i').x, BH + 0.4, hole(18, 'i').z);
   const breakGlow = sprite('#ff3b2a', 9, false); // marks a cable that is off or shorted
   breakGlow.scale.setScalar(0.9);
   const ringGeo = new THREE.RingGeometry(0.2, 0.25, 40);
@@ -674,8 +676,17 @@ export function buildPlantScene() {
       cPumpMinus.wireMat.emissiveIntensity = 0.6 * P;
       fetGlow.material.opacity = 0.55 * G * popK;
       fetGlow.scale.setScalar(1.1);
+      // the diode carries the coil current only for a moment after the MOSFET opens (s.flyback decays from 1 to 0)
+      const F = clamp01(s.flyback || 0);
       diode.bodyMat.emissive.set('#ff9a4a');
-      diode.bodyMat.emissiveIntensity = 0.0;
+      diode.bodyMat.emissiveIntensity = 1.4 * F;
+      flyGlow.material.opacity = 0.9 * F * popK;
+      flyGlow.scale.setScalar(0.8 + 0.6 * F);
+      jV5.wireMat.emissiveIntensity = Math.max(jV5.wireMat.emissiveIntensity, 0.7 * F);
+      cPumpMinus.wireMat.emissiveIntensity = Math.max(cPumpMinus.wireMat.emissiveIntensity, 0.6 * F);
+      cPumpPlus.wireMat.emissiveIntensity = Math.max(cPumpPlus.wireMat.emissiveIntensity, 0.6 * F);
+      S(16).opacity = Math.max(S(16).opacity, 0.14 + 0.5 * F);
+      S(20).opacity = Math.max(S(20).opacity, 0.14 + 0.5 * F);
 
       // sensor circuit
       const sensing = s.running ? 1 : 0;

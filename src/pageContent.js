@@ -126,7 +126,7 @@ const schematic4 = (() => {
       + `<path d="M232 ${y} H410 L420 ${y - 16} L436 ${y + 16} L452 ${y - 16} L468 ${y + 16} L484 ${y - 16} L496 ${y} H560"/>`
       + `<path d="M560 ${y - 26} V${y + 26} L610 ${y} Z" fill="${r.c}" fill-opacity="0.22" stroke="${r.c}"/>`
       + `<path d="M610 ${y - 26} V${y + 26} M610 ${y} H720" stroke="${r.c}"/></g>`
-      + `<g fill="none" stroke="${r.c}" stroke-width="2.6" stroke-linecap="round"><path d="M576 ${y - 36} L594 ${y - 56} M586 ${y - 56} H594 V${y - 47}"/><path d="M596 ${y - 36} L614 ${y - 56} M606 ${y - 56} H614 V${y - 47}"/></g>`
+      + `<g fill="none" stroke="${r.c}" stroke-width="2.6" stroke-linecap="round"><path d="M616 ${y + 8} L630 ${y + 22} M622 ${y + 22} H630 V${y + 14}"/><path d="M634 ${y + 8} L648 ${y + 22} M640 ${y + 22} H648 V${y + 14}"/></g>`
       + `<circle cx="232" cy="${y}" r="8" fill="#d8b04a" stroke="${INK}" stroke-width="2.5"/><circle cx="720" cy="${y}" r="5" fill="${INK}"/>`
       + `<text x="244" y="${y - 12}" font-size="19" font-weight="600" fill="${INK}">${r.pin}</text>`
       + `<text x="453" y="${y - 28}" font-size="18" font-weight="600" text-anchor="middle" fill="${INK}">330 Ω</text>`

@@ -3,6 +3,7 @@ import { leftPageTexture, rightPageTexture } from '../../textures.js';
 import { ESP32_DOOR_PAGE } from './pageContent.js';
 import { DoorAlarm, parseSettings, PINS, CLOSED, OPEN_LEVEL } from './doorAlarm.js';
 import { $, $$, renderCode, bindCopy, createConsole, renderSteps } from '../../ui.js';
+import { IDE_INTRO } from './ide.js';
 
 /*
  * ESP32 chapter 1: open door alarm.
@@ -105,7 +106,8 @@ const simHtml = (s) => `
   <div class="views">${viewButtons.map(([v, t]) => `<button class="chip-btn" data-view="${v}">${t}</button>`).join('')}</div>`;
 
 const codeHtml = (s) => `
-  <p>Arduino C++ for the ESP32-DevKitC. This file is the one that runs on the board, the one the simulation follows and the one you download. The loop never blocks: it reads <code>millis()</code> and decides what to do on every pass.</p>
+  ${IDE_INTRO}
+  <p>This file is the one that runs on the board, the one the simulation follows and the one you download. The loop never blocks: it reads <code>millis()</code> and decides what to do on every pass.</p>
   <div class="code-head"><span>door_alarm.ino</span>
     <span class="code-actions"><button id="copyBtn" class="chip-btn">Copy</button><a id="dlLink" class="chip-btn" href="arduino/door_alarm/door_alarm.ino" download="door_alarm.ino">Download</a></span></div>
   <pre class="code" id="code" tabindex="0"></pre>
@@ -247,6 +249,7 @@ export default {
     let hist = [];
     const audio = { on: false, ctx: null, osc: null, gain: null };
     let guided = null; // { n, steps, i, state }
+    let paused = false; // camera bar Pause: the simulated clock is frozen, the program keeps its state
     const BOUNCE_OFFSETS = [0, 2, 3, 6, 8, 12, 15]; // ms after the contact moves: an odd number of changes ends on the new level
 
     const rawLevel = (ms) => {
@@ -294,7 +297,15 @@ export default {
     }
 
     /* ---------- the program ---------- */
+    function setPaused(on) {
+      if (paused === on || !alarm.running) return;
+      paused = on;
+      if (on) mute();
+      log(on ? '# Paused: simulated time is frozen. Play continues from here.' : '# Playing again.', 'c');
+      ui?.refresh();
+    }
     function startProgram(why = 'run') {
+      paused = false;
       bounce = null;
       devMs = 0;
       passMs = 0;
@@ -310,6 +321,7 @@ export default {
     }
     function stopProgram(why) {
       const was = alarm.running;
+      paused = false;
       lastElapsed = alarm.elapsedMs(clockBase + passMs);
       alarm.stop();
       mute();
@@ -400,7 +412,7 @@ export default {
     }
     function driveSound() {
       if (!audio.on || !audio.ctx) return;
-      const want = alarm.running && speed === 1 && alarm.out.buzzer ;
+      const want = alarm.running && !paused && speed === 1 && alarm.out.buzzer;
       if (want && audio.ctx.state !== 'running') audio.ctx.resume();
       audio.gain.gain.setTargetAtTime(want ? 0.04 : 0, audio.ctx.currentTime, 0.004);
     }
@@ -601,7 +613,7 @@ export default {
       q('#btnOpenDoor').addEventListener('click', () => (doorGoal = openGoal()));
       q('#btnCloseDoor').addEventListener('click', () => (doorGoal = 0));
       ui.radios.forEach((r) => r.addEventListener('change', () => r.checked && setMount(r.value)));
-      btnRun.addEventListener('click', () => !alarm.running && startProgram('run'));
+      btnRun.addEventListener('click', () => (alarm.running ? setPaused(false) : startProgram('run')));
       btnStop.addEventListener('click', () => {
         cancelGuided('Cancelled: the program was stopped.');
         stopProgram('user');
@@ -635,7 +647,8 @@ export default {
       ui.setGuidedBusy = (busy) => guidedItems.forEach((li) => ($('button', li).disabled = busy));
       ui.markState = () => {};
       ui.refresh = () => {
-        btnRun.disabled = alarm.running;
+        btnRun.disabled = alarm.running && !paused;
+        btnRun.textContent = alarm.running && paused ? '▶ Resume' : '▶ Run';
         btnStop.disabled = !alarm.running;
         code.setTag(L.pull, '');
         if (!alarm.running) code.setActive(-1);
@@ -707,7 +720,7 @@ export default {
         if (!sliding && Number(slider.value) !== Math.round(doorDeg)) slider.value = String(Math.round(doorDeg));
         slider.setAttribute('aria-valuetext', `${Math.round(doorDeg)} degrees, ${contactClosed ? 'door closed' : 'door open'}`);
 
-        const ps = run ? `Program: running · ${PROG_NAMES[st]}` : 'Program: STOPPED (LED and buzzer off, counter halted)';
+        const ps = run ? `Program: ${paused ? 'PAUSED' : 'running'} · ${PROG_NAMES[st]}` : 'Program: STOPPED (LED and buzzer off, counter halted)';
         if (progEl.textContent !== ps) progEl.textContent = ps;
         progEl.classList.toggle('on', run);
         progEl.classList.toggle('stopped', !run);
@@ -823,8 +836,8 @@ export default {
         }
         updateContact();
 
-        // the program: loop() runs once per simulated millisecond
-        if (alarm.running) {
+        // the program: loop() runs once per simulated millisecond (not while paused)
+        if (alarm.running && !paused) {
           devMs += dt * 1000 * speed;
           const target = Math.floor(devMs);
           while (passMs < target) {
@@ -875,6 +888,7 @@ export default {
         speed = 1;
         guided = null;
         autoStart = false;
+        paused = false;
         view.led = view.buzzer = view.reed = view.input = view.base = 0;
         hist = [];
         if (mount !== 'fridge') setMount('fridge', true);
@@ -919,6 +933,14 @@ export default {
       /** Test helper (?led=on): arms the program to start as soon as the scene is built. */
       debugOn() {
         autoStart = true;
+      },
+      /** Camera bar play / pause. Play starts the program if it is stopped; Pause freezes the simulated clock. */
+      isRunning: () => alarm.running && !paused,
+      setRunning(on) {
+        if (on) {
+          if (!alarm.running) startProgram('run');
+          else setPaused(false);
+        } else setPaused(true);
       },
       /** Test helpers. */
       debugSetDoor(deg) {

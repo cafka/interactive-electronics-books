@@ -222,6 +222,9 @@ export class PlantWatering {
     this.pumpTotalMs = 0;
     this.percentBeforePulse = 0;
     this.resetInputs(now);
+    // as in the sketch: the button level at power-up is trusted, so a held or miswired button is not a press
+    this.lastButtonReading = this.io.readButton();
+    this.buttonStable = this.lastButtonReading;
     this.lockReason = this.io.loadLock();
     // state is still 'STOPPED' here, so the first 'state' event says where the program came from
     if (this.lockReason !== LOCK.NONE) this.enterState('LOCKED', now);

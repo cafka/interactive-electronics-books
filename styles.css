@@ -421,7 +421,41 @@ kbd { border: 1px solid rgba(43,39,64,0.25); border-bottom-width: 2px; }
 .left-bar-btn.primary { color: #1b1405; background: linear-gradient(180deg, #f2d98e, #d8b25a); border-color: transparent; }
 .left-bar-btn:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
 
+/* camera views and play / pause, above the 3D view; slides away while scrolling, back on any interaction */
+.cam-bar {
+  position: fixed; top: 10px; left: 140px; right: 0; z-index: 8; display: flex; justify-content: center; align-items: center;
+  gap: 8px; padding: 0 12px; pointer-events: none; transition: transform 0.25s ease, opacity 0.25s ease;
+}
+.cam-bar[hidden] { display: none; }
+.cam-bar.away { transform: translateY(calc(-100% - 16px)); opacity: 0; }
+.cam-bar.away > * { pointer-events: none; }
+.cam-bar > * { pointer-events: auto; }
+.cam-views {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 4px; padding: 4px; border-radius: 22px; background: rgba(14,20,40,0.82);
+  border: 1px solid rgba(216,178,90,0.45); scrollbar-width: none; max-width: 100%;
+}
+.cam-views::-webkit-scrollbar { display: none; }
+.cam-btn {
+  flex: none; padding: 7px 9px; cursor: pointer; font: 600 12px var(--sans); color: #f3ecd6; white-space: nowrap;
+  background: transparent; border: 1px solid transparent; border-radius: 999px; transition: background 0.2s;
+}
+.cam-btn:hover { background: rgba(60,74,120,0.9); }
+.cam-btn[aria-pressed=true] { color: #1b1405; background: linear-gradient(180deg, #f2d98e, #d8b25a); }
+.cam-btn:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.cam-btn.play { flex: none; padding: 9px 16px; font-weight: 700; background: rgba(14,20,40,0.88); border-color: rgba(216,178,90,0.6); }
+.cam-btn.play[aria-pressed=true] { color: #f3ecd6; background: #b5432a; border-color: transparent; }
+.cam-btn.play[hidden] { display: none; }
+/* left page view: everything outside the left page is covered, so only that page is seen */
+.left-mask {
+  position: fixed; z-index: 5; pointer-events: none; border-radius: 3px;
+  box-shadow: 0 0 0 200vmax #0b1022; transition: opacity 0.3s;
+}
+.left-mask[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) { .cam-bar { transition: none; } }
+
 @media (max-width: 900px) {
+  .cam-bar { top: 50px; left: 0; justify-content: flex-start; }
+  .cam-views { flex-wrap: nowrap; overflow-x: auto; border-radius: 999px; }
   .left-bar { top: 6px; gap: 6px; flex-wrap: wrap; }
   .left-bar-title { display: none; }
   .left-bar-btn { padding: 9px 12px; font-size: 13px; }
@@ -655,6 +689,9 @@ body.reading .library-btn { display: none; }
 .status-row .chip.on { background: #fff3cc; border-color: #d9a400; }
 @media (max-width: 900px) { .status-row.four { grid-template-columns: repeat(2, 1fr); } }
 @media (prefers-reduced-motion: reduce) { .alarm-box.alarm.beep { outline-width: 2px; } }
+/* ESP32 code tab heading: board, environment, language */
+.code-title { margin-top: 4px; }
+.code-sub { margin: 4px 0; font-size: 13px; line-height: 1.45; }
 /* ESP32 chapter 2: plant watering */
 .alarm-box.watering { background: #d7e9f8; border-color: #2f86d6; }
 .alarm-box.watering .al-bar i { background: #2f86d6; }

@@ -231,6 +231,10 @@ void setup() {
   lastSampleMs = now;
   lastReportMs = now;
   buttonChangedMs = now;
+  // Trust the button level at power-up: a button held (or wired wrong) at start is not a press,
+  // so it can never clear a saved lock by itself. A press needs a change from HIGH to LOW.
+  lastButtonReading = digitalRead(BUTTON_PIN);
+  buttonStable = lastButtonReading;
   if (lockReason != LOCK_NONE) {
     Serial.printf("Still locked from before: %s\n", lockText(lockReason));
     enterState(LOCKED, now);

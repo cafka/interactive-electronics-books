@@ -301,6 +301,26 @@ test('clearing the lock: only the button, only with a valid sensor, and the boun
   assert.equal(r.a.lockReason, LOCK.NONE);
 });
 
+test('a button held or miswired (stuck LOW) at power-up never clears a saved lock', () => {
+  const r = rig({ soil: 20, storage: { lock: LOCK.NO_RESPONSE } });
+  r.button = 0;
+  r.reboot(); // boots with the button already LOW
+  r.step(60000);
+  assert.equal(r.a.state, 'LOCKED', 'no press was seen: the level never changed from HIGH to LOW');
+  assert.equal(r.storage.lock, LOCK.NO_RESPONSE);
+  assert.equal(r.pumpMs, 0);
+  r.button = 1;
+  r.step(200);
+  r.press(120); // a real press after release does clear it
+  assert.notEqual(r.a.state, 'LOCKED');
+});
+
+test('the sketch reads the button at power-up, so a stuck button is not a press', () => {
+  const setupBody = source.slice(source.indexOf('void setup()'), source.indexOf('void loop()'));
+  assert.match(setupBody, /lastButtonReading = digitalRead\(BUTTON_PIN\)/);
+  assert.match(setupBody, /buttonStable = lastButtonReading/);
+});
+
 test('a button press outside LOCKED does nothing', () => {
   const r = rig({ soil: 60 });
   r.step(3000);

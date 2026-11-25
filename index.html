@@ -78,8 +78,15 @@
   <button id="cornerNext" class="corner-tag next" hidden>Next <span aria-hidden="true">›</span></button>
   <button id="cornerPrev" class="corner-tag prev" hidden><span aria-hidden="true">‹</span> Previous</button>
 
+  <div id="camBar" class="cam-bar" hidden role="toolbar" aria-label="Camera views and simulation">
+    <button id="camPlay" class="cam-btn play" hidden aria-pressed="false">▶ Play</button>
+    <div id="camViews" class="cam-views"></div>
+  </div>
+  <div id="leftMask" class="left-mask" hidden aria-hidden="true"></div>
   <div id="leftBar" class="left-bar" hidden role="toolbar" aria-label="Left page view">
     <span class="left-bar-title">Left page view</span>
+    <button id="leftZoomOut" class="left-bar-btn" aria-label="Zoom out of the page">−</button>
+    <button id="leftZoomIn" class="left-bar-btn" aria-label="Zoom in to the page (drag to move around)">+</button>
     <button id="leftNotebook" class="left-bar-btn">Hide notebook</button>
     <button id="leftBack" class="left-bar-btn primary">← Back to previous view</button>
   </div>

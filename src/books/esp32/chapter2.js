@@ -5,6 +5,7 @@ import { PlantWatering, parseSettings, PINS, LOCK, LOCK_TEXT, LOCK_NAME } from '
 import { PlantWorld, WEAK_PUMP } from './plantWorld.js';
 import { PARTS, CONNECTIONS, FAULTS, PIN_TABLE, ELEC, electricalCheck, ADC_LINEAR_NOTE } from './plantParts.js';
 import { $, $$, escapeHtml, renderCode, bindCopy, createConsole, renderSteps } from '../../ui.js';
+import { IDE_INTRO } from './ide.js';
 
 /*
  * ESP32 chapter 2: smart plant watering.
@@ -18,8 +19,8 @@ import { $, $$, escapeHtml, renderCode, bindCopy, createConsole, renderSteps } f
  */
 
 const viewButtons = [
-  ['circuit', 'Whole project'], ['book', 'Whole book'], ['leftpage', 'Left page'], ['wiring', 'Breadboard'],
-  ['pins', 'ESP32 pins'], ['water', 'Water side'], ['sensor', 'Soil sensor'], ['pump', 'Tank and pump'],
+  ['circuit', 'Whole project'], ['assembly', 'Assembly'], ['leftpage', 'Left page'], ['wiring', 'Breadboard'],
+  ['pins', 'ESP32 pins'], ['water', 'Water'], ['sensor', 'Sensor'], ['pump', 'Tank + pump'],
 ];
 
 const STEPS = [
@@ -144,7 +145,8 @@ const simHtml = (s) => `
   <div class="views">${viewButtons.map(([v, t]) => `<button class="chip-btn" data-view="${v}">${t}</button>`).join('')}</div>`;
 
 const codeHtml = (s) => `
-  <p>Arduino C++ for the ESP32-DevKitC. This is the file that runs on the board, the one the simulation follows (its constants are read from it) and the one you download. The loop never blocks.</p>
+  ${IDE_INTRO}
+  <p>This is the file that runs on the board, the one the simulation follows (its constants are read from it) and the one you download. The loop never blocks.</p>
   <div class="code-head"><span>plant_watering.ino</span>
     <span class="code-actions"><button id="copyBtn" class="chip-btn">Copy</button><a id="dlLink" class="chip-btn" href="arduino/plant_watering/plant_watering.ino" download="plant_watering.ino">Download</a></span></div>
   <pre class="code" id="code" tabindex="0"></pre>
@@ -202,7 +204,7 @@ const howHtml = (s) => {
   <ul class="explain-list">
     <li><b>Gate:</b> 3.3 V through 100 Ω with 10 kΩ to ground gives ${n2(e.gateV)} V at the gate. The IRLZ44N starts to conduct between 1 and 2 V and is specified fully on at 4 V (Rds(on) ${ELEC.mosfetRdsOn4V * 1000} mΩ). At 3.3 V a small pump is far below its current limit, but use a logic-level part: an IRF520 or IRFZ44N barely turns on at 3.3 V.</li>
     <li><b>MOSFET heat:</b> even with a stalled pump (${mA(ELEC.pumpStallA)}) the drop is ${n2(e.pumpDrop)} V and the heat ${n2(e.pumpHeat)} W. No heatsink needed.</li>
-    <li><b>Supply:</b> board ${mA(ELEC.boardA)} + sensor ${mA(ELEC.sensorSupplyA)} + pump ${mA(ELEC.pumpRunA)} = ${mA(e.normalA)} while pumping. With a stalled pump: ${mA(e.stallA)}. A PC port gives 500 mA, so use a <b>5 V charger of at least 1.5 A</b>. The pump current goes through the board's 5V pin, which is wired straight to USB: keep the pump small (250 mA or less running).</li>
+    <li><b>Supply:</b> board ${mA(ELEC.boardA)} + sensor ${mA(ELEC.sensorSupplyA)} + pump ${mA(ELEC.pumpRunA)} = ${mA(e.normalA)} while pumping. With a stalled pump: ${mA(e.stallA)}. A PC port gives 500 mA, so use a <b>5 V charger of at least 1.5 A</b>. The pump current comes from USB through the board and its 5V pin, so keep the pump small (250 mA or less running). Boards differ in what sits between the USB connector and the 5V pin (a trace, a diode or a fuse), so check your board's schematic before using a larger pump.</li>
     <li><b>Start-up:</b> a motor draws several times its running current for a few milliseconds. The 470 µF capacitor between 5 V and GND supplies that, so the 3.3 V regulator does not dip and reset the ESP32.</li>
     <li><b>Diode:</b> the 1N5819 carries the coil current (up to ${mA(e.flybackA)}) for a moment when the MOSFET opens. It is rated 1 A and 40 V. Band (cathode) toward 5 V, otherwise it shorts the supply when the pump runs.</li>
     <li><b>LED:</b> (3.3 − 2.0) V / 330 Ω ≈ ${mA(e.ledA)}.</li>
@@ -214,7 +216,7 @@ const howHtml = (s) => {
     <li><b>Plan the layout first.</b> The tank and the pot go on a tray, lower than the electronics and at least 30 cm away. The breadboard and the ESP32 sit higher, on a dry surface. Water can only run downhill, away from the board.</li>
     <li>Unplug the USB. Put the ESP32 at the end of the breadboard and connect <b>GND</b> to the GND rail and <b>5V</b> to the 5V rail. Check twice: 5V and GND swapped damages the board.</li>
     <li>Status LED: GPIO26 → 330 Ω → LED anode (long leg); cathode → GND rail.</li>
-    <li>Button: GPIO27 to one side of the button, the opposite side to the GND rail (use legs on opposite corners).</li>
+    <li>Button: a 6 mm button has four legs in two pairs that are always joined. Turn it so each joined pair sits in one column (columns 28 and 30), then GPIO27 goes to column 28 and column 30 to the GND rail. Check with a multimeter: no continuity between the columns until you press. If it is turned 90°, GPIO27 reads LOW all the time.</li>
     <li>Sensor: VCC to <b>3V3</b> (not 5V), GND to the GND rail, AOUT to GPIO34. Put the 100 kΩ from GPIO34 to GND.</li>
     <li>MOSFET with the printed face toward you: gate, drain, source from left to right. Gate ← 100 Ω ← GPIO25. 10 kΩ from gate to GND. Source to GND.</li>
     <li>Pump: “+” wire to the 5V rail, “−” wire to the drain. Diode across the pump: anode on the drain, band on 5 V. Capacitor: long leg on 5 V, short leg on GND.</li>
@@ -244,6 +246,7 @@ const howHtml = (s) => {
     ['LED blinks three times (code 3)', 'Pump time limit reached', 'Weak pump or long hose: measure the flow. The sensor may be far from where the water lands.'],
     ['Pump never stops in a test (pump wire on, LED off)', 'MOSFET wired wrong or damaged', 'Unplug at once. Check G, D, S order and that the gate goes to 100 Ω, not straight to 5 V.'],
     ['Pump never runs, LED solid', 'Power path', 'Pump “+” on the 5V rail, “−” on the drain; source on GND; diode band toward 5 V.'],
+    ['GPIO27 reads LOW without pressing', 'Button turned 90°', 'Each always-joined pair of legs must be in one column. Turn the button a quarter turn. (A button held at power-up is not taken as a press, so it cannot clear a lock.)'],
     ['Readings jump around', 'Noise', 'Shorter sensor cable, keep it away from the pump wires, check the sensor GND.'],
     ['Moisture reads 0 % or 100 % all the time', 'Calibration', 'RAW_DRY and RAW_WET swapped or from another sensor. Repeat the calibration.'],
   ].map((r) => r.map(esc)))}
@@ -276,7 +279,9 @@ export default {
   defaultView: 'circuit',
   viewButtons,
   views: {
-    circuit: { t: [7.0, 1.0, -1.4], r: 21, phi: 0.84, theta: 0.12 },
+    // whole project: the complete open book (x -11..11, z -7..7, parts up to 3.5 high), centred, seen from the reader's side
+    circuit: { t: [0, 0.6, 0.4], r: 27, phi: 0.74, theta: 0 },
+    assembly: { t: [7.0, 1.0, -1.4], r: 17, phi: 0.84, theta: 0.12 },
     wiring: { t: [5.6, 0.6, 1.2], r: 10.5, phi: 0.72, theta: 0 },
     pins: { t: [4.6, 0.6, -2.4], r: 6.4, phi: 0.78, theta: 0.1 },
     water: { t: [9.8, 1.4, -4.0], r: 11, phi: 0.92, theta: 0.55 },
@@ -287,7 +292,7 @@ export default {
   textures: () => ({
     left: leftPageTexture(ESP32_PLANT_PAGE),
     right: rightPageTexture({
-      fig: 'FIG. 2', caption: 'Soil → sensor → GPIO34 → filter → state machine → GPIO25 → MOSFET → pump', page: 4,
+      fig: 'FIG. 2', caption: 'Soil → sensor → IO34 → program → IO25 → MOSFET → pump', page: 4,
       hint: 'Click the red button or the soil sensor in the scene, or use the notebook.',
     }),
   }),
@@ -314,10 +319,12 @@ export default {
     let devMs = 0, passMs = 0, pumpMs = 0, lastHist = -1e9, lockedAt = 0;
     const clockBase = 0;
     let popT = 0, autoStart = false, ui = null;
+    let paused = false; // Pause (camera bar or Run/Pause): the simulated clock is frozen, the program keeps its state
+    let prevPump = false;
     let pickWhat = null, pressMoved = false;
     let hist = [];
     let guided = null;
-    const view = { pump: 0, led: 0, button: 0, flow: 0 };
+    const view = { pump: 0, led: 0, button: 0, flow: 0, fly: 0 };
 
     const io = {
       readAdc: () => world.readAdc(S),
@@ -358,7 +365,14 @@ export default {
     }
 
     /* ---------- program ---------- */
+    function setPaused(on) {
+      if (paused === on || !ctrl.running) return;
+      paused = on;
+      log(on ? '# Paused: simulated time is frozen. Play continues from here.' : '# Playing again.', 'c');
+      ui?.refresh();
+    }
     function startProgram(why = 'run') {
+      paused = false;
       devMs = passMs = pumpMs = 0;
       lastHist = -1e9;
       hist = [];
@@ -368,6 +382,7 @@ export default {
     }
     function stopProgram(why) {
       const was = ctrl.running;
+      paused = false;
       ctrl.stop();
       if (was && why === 'user') log('# Stopped: pump and LED off.', 'c');
       ui?.refresh();
@@ -571,7 +586,7 @@ export default {
       optHose.addEventListener('change', () => (world.hoseBlocked = optHose.checked));
       optWeak.addEventListener('change', () => (world.pumpStrength = optWeak.checked ? WEAK_PUMP : 1));
 
-      btnRun.addEventListener('click', () => !ctrl.running && startProgram('run'));
+      btnRun.addEventListener('click', () => (ctrl.running ? setPaused(false) : startProgram('run')));
       btnStop.addEventListener('click', () => {
         cancelGuided('Cancelled: the program was stopped.');
         stopProgram('user');
@@ -638,7 +653,8 @@ export default {
         wetRange.value = String(ctrl.s.wetOff);
       };
       ui.refresh = () => {
-        btnRun.disabled = ctrl.running;
+        btnRun.disabled = ctrl.running && !paused;
+        btnRun.textContent = ctrl.running && paused ? '▶ Resume' : '▶ Run';
         btnStop.disabled = !ctrl.running;
         if (!ctrl.running) code.setActive(-1);
       };
@@ -708,12 +724,12 @@ export default {
         setText(wetVal, `${ctrl.s.wetOff} %`);
         btnHold.classList.toggle('held', buttonDown);
 
-        const ps = run ? `Program: running · ${STATE_NAMES[stName]}` : 'Program: STOPPED (pump and LED off)';
+        const ps = run ? `Program: ${paused ? 'PAUSED' : 'running'} · ${STATE_NAMES[stName]}` : 'Program: STOPPED (pump and LED off)';
         setText(progEl, ps);
         progEl.classList.toggle('on', run);
         progEl.classList.toggle('stopped', !run);
         setText(speedInfo, `${speed}×`);
-        setText(clockInfo, run ? `Simulated time since start: ${fmtS(devMs)}. At ${speed}× one real second is ${speed} simulated seconds. Water pumped: ${Math.round(world.pumpedMl)} ml.` : 'Simulated time stops with the program.');
+        setText(clockInfo, run && paused ? `Paused at ${fmtS(devMs)} of simulated time. Press Play (top bar) or Resume.` : run ? `Simulated time since start: ${fmtS(devMs)}. At ${speed}× one real second is ${speed} simulated seconds. Water pumped: ${Math.round(world.pumpedMl)} ml.` : 'Simulated time stops with the program.');
 
         // highlighted code line
         let active = -1;
@@ -805,12 +821,14 @@ export default {
       ctrl.setThresholds(S.dryOn, S.wetOff);
       world = new PlantWorld();
       buttonDown = false;
+      paused = false;
+      prevPump = false;
       speed = 10;
       guided = null;
       autoStart = false;
       hist = [];
       devMs = passMs = pumpMs = 0;
-      view.pump = view.led = view.button = view.flow = 0;
+      view.pump = view.led = view.button = view.flow = view.fly = 0;
     }
 
     return {
@@ -834,7 +852,7 @@ export default {
           autoStart = false;
           startProgram('run');
         }
-        if (ctrl.running) {
+        if (ctrl.running && !paused) {
           devMs += dt * 1000 * speed;
           const target = Math.floor(devMs);
           while (passMs < target && ctrl.running) {
@@ -863,11 +881,15 @@ export default {
         view.button += ((buttonDown ? 1 : 0) - view.button) * (1 - Math.exp(-dt * 25));
         view.flow += ((world.flowing ? world.pumpStrength : 0) - view.flow) * (1 - Math.exp(-dt * 6));
         const pumping = ctrl.out.pump;
+        // the moment the MOSFET opens, the pump coil pushes its current through the diode: shown as a short glow
+        if (prevPump && !pumping) view.fly = 1;
+        prevPump = pumping;
+        view.fly = Math.max(0, view.fly - dt * 2.5);
         scene.update(time, dt, {
           soil: world.wetness, surface: world.surface, tank: world.tankMl / world.p.tankMax, flow: view.flow,
           gate: view.pump, pumpI: world.hoseBlocked && pumping ? Math.max(view.pump, 1) : view.pump, led: view.led, button: view.button,
           adc: ctrl.running ? ctrl.lastRaw / 4095 : 0, sensorMode: world.sensor, running: ctrl.running,
-          dryRun: pumping && world.tankMl <= 0 ? 1 : 0, stall: pumping && world.hoseBlocked ? 1 : 0, locked: ctrl.state === 'LOCKED',
+          dryRun: pumping && world.tankMl <= 0 ? 1 : 0, stall: pumping && world.hoseBlocked ? 1 : 0, locked: ctrl.state === 'LOCKED', flyback: view.fly,
         }, camera, viewportH);
       },
       activeStep() {
@@ -923,8 +945,17 @@ export default {
       debugOn() {
         autoStart = true;
       },
+      /** Camera bar play / pause. Play starts the program if it is stopped; Pause freezes the simulated clock. */
+      isRunning: () => ctrl.running && !paused,
+      setRunning(on) {
+        if (on) {
+          if (!ctrl.running) startProgram('run');
+          else setPaused(false);
+        } else setPaused(true);
+      },
       inspect() {
         return {
+          paused,
           running: ctrl.running, state: ctrl.state, lockReason: ctrl.lockReason, stored: storage.lock, speed, devMs, pumpMs,
           out: { ...ctrl.out }, raw: ctrl.lastRaw, seen: percentSeen(), thresholds: [ctrl.s.dryOn, ctrl.s.wetOff],
           world: { bulk: world.bulk, tankMl: world.tankMl, sensor: world.sensor, spillMl: world.spillMl, pumpedMl: world.pumpedMl },

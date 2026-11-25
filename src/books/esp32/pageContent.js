@@ -24,10 +24,10 @@ const schematic = svgWrap(860, 440, `
     <!-- buzzer branch -->
     <path d="M150 340 H240"/><path d="${zig(240, 340)}"/>
     <path d="M324 340 H640"/>
-    <path d="M640 310 V370 M640 322 L700 296 V258 M640 358 L700 384 V400"/>
+    <path d="M640 310 V370 M640 322 L700 296 V258 M640 358 L700 384 V392"/>
     <circle cx="700" cy="228" r="30"/>
     <path d="M700 198 V176 M700 258 V296"/>
-    <path d="${gnd(700, 400)}" />
+    <path d="${gnd(700, 392)}" />
   </g>
   <g fill="none" stroke="${ACCENT}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
     <path d="M430 118 L452 92 M441 92 H452 V103"/><path d="M452 118 L474 92 M463 92 H474 V103"/>
@@ -49,13 +49,13 @@ const schematic = svgWrap(860, 440, `
     <text x="700" y="166" text-anchor="middle">5V</text>
     <text x="600" y="132" text-anchor="middle">GND</text>
     <text x="470" y="236" text-anchor="middle">GND</text>
-    <text x="700" y="456" text-anchor="middle" font-size="18">GND</text>
+    <text x="730" y="424" font-size="18">GND</text>
   </g>
   <g fill="${ACCENT}" font-size="17" font-weight="700"><text x="474" y="18">magnet closes it</text></g>
   <g fill="${INK}" font-size="17" opacity="0.7"><text x="150" y="26" text-anchor="start">pull-up on</text><text x="700" y="232" text-anchor="middle" font-size="22" font-weight="700">+</text></g>`, 'Schematic: IO27 to a reed switch to ground; IO26 through 330 ohms to an LED to ground; IO25 through 1 kilohm to a 2N3904 that switches a buzzer between 5 volts and ground');
 
 const statesFigure = svgWrap(860, 168, `
-  <defs><marker id="ar" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="${INK}"/></marker></defs>
+  <defs><marker id="ar" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" refX="11" refY="6" orient="auto"><path d="M0 0 L12 6 L0 12 Z" fill="${INK}"/></marker></defs>
   <g stroke="${INK}" stroke-width="3" fill="none">
     <rect x="12" y="38" width="210" height="72" rx="14" fill="#e9e1c8"/>
     <rect x="325" y="38" width="210" height="72" rx="14" fill="#f4dfa6"/>
@@ -92,69 +92,100 @@ export const ESP32_DOOR_PAGE = {
 /* ------------------------------------------------------------------ chapter 2: smart plant watering */
 const vres = (x, y, w = 18, h = 40) => `<rect x="${x - w / 2}" y="${y}" width="${w}" height="${h}" rx="3"/>`;
 
+/*
+ * Schematic, same nets as src/books/esp32/plantParts.js (NETS) and the breadboard in plantScene.js:
+ *   3V3 -> sensor VCC, sensor GND -> GND, sensor AOUT -> IO34, 100 kohm IO34 -> GND
+ *   IO25 -> 100 ohm -> gate; 10 kohm gate -> GND; source -> GND; drain -> pump "-"; pump "+" -> 5V
+ *   1N5819 across the pump: anode on the drain, cathode (bar) on 5V; 470 uF from 5V to GND
+ *   IO26 -> 330 ohm -> LED -> GND;  IO27 -> button -> GND
+ * Layout rule: no label sits on a wire, every wire ends on a node dot or a part, nothing leaves the 860 x 500 box.
+ */
 const plantSchematic = svgWrap(860, 500, `
   <g fill="none" stroke="${INK}" stroke-width="4" stroke-linejoin="round" stroke-linecap="round">
-    <!-- soil sensor -->
-    <rect x="120" y="14" width="190" height="96" rx="12"/>
-    <path d="M60 46 H120"/><path d="M215 110 V124"/><path d="${gnd(215, 124)}"/>
-    <path d="M310 70 H500"/><path d="M420 70 V84"/>${vres(420, 84, 18, 36)}<path d="M420 120 V130"/><path d="${gnd(420, 130)}"/>
-    <!-- pump branch -->
-    <path d="M60 300 H110"/><path d="${zig(110, 300)}"/><path d="M194 300 H325"/>
-    <path d="M250 300 V322"/>${vres(250, 322, 18, 36)}<path d="M250 358 V368"/><path d="${gnd(250, 368)}"/>
-    <path d="M325 283 V317"/><path d="M345 273 V290 M345 296 V304 M345 310 V327"/><path d="M345 273 V258 H430 V266"/>
-    <path d="M345 327 V352"/><path d="${gnd(345, 352)}"/>
-    <path d="M345 300 H337"/>
-    <path d="M360 190 H520"/><path d="M430 190 V212"/><circle cx="430" cy="238" r="26"/><path d="M430 264 V258"/>
-    <path d="M500 190 V214 M486 214 H514 M486 246 H514 L500 214 Z M500 246 V258 H430"/>
-    <path d="M580 190 V228 M566 228 H594 M566 240 H594 M580 240 V300"/><path d="${gnd(580, 300)}"/>
+    <!-- soil sensor: VCC from 3V3, GND to ground, AOUT to IO34 with a 100 kohm pull-down -->
+    <rect x="120" y="14" width="190" height="82" rx="12"/>
+    <path d="M60 40 H120"/>
+    <path d="M215 96 V104"/><path d="${gnd(215, 104)}"/>
+    <path d="M310 55 H500"/>
+    <path d="M420 55 V66"/>${vres(420, 66, 18, 34)}<path d="M420 100 V108"/><path d="${gnd(420, 108)}"/>
+    <!-- 5 V rail from the board's 5V pin -->
+    <path d="M410 168 H720"/>
+    <!-- pump between 5V and the drain -->
+    <path d="M470 168 V184"/><circle cx="470" cy="206" r="22"/><path d="M470 228 V262"/>
+    <!-- flyback diode across the pump: cathode bar at the top (5V), anode at the bottom (drain) -->
+    <path d="M550 168 V196"/><path d="M534 196 H566"/><path d="M534 228 H566 L550 196 Z"/><path d="M550 228 V262 H470"/>
+    <!-- 470 uF electrolytic from 5V to GND -->
+    <path d="M720 168 V200"/><path d="M700 200 H740"/><path d="M700 214 Q720 206 740 214"/><path d="M720 212 V248"/><path d="${gnd(720, 248)}"/>
+    <!-- N-channel MOSFET: drain on top, source at the bottom, body joined to the source -->
+    <path d="M470 262 V286 H444"/>
+    <path d="M440 278 V294 M440 300 V316 M440 322 V338" stroke-width="5"/>
+    <path d="M446 308 H470 V330"/><path d="M444 330 H470"/><path d="M470 330 V346"/><path d="${gnd(470, 346)}"/>
+    <path d="M428 280 V336"/>
+    <!-- gate: IO25 -> 100 ohm -> gate, 10 kohm to GND -->
+    <path d="M60 330 H110"/><path d="${zig(110, 330)}"/><path d="M194 330 H428"/>
+    <path d="M360 330 V342"/>${vres(360, 342, 18, 34)}<path d="M360 376 V382"/><path d="${gnd(360, 382)}"/>
+    <!-- status LED -->
+    <path d="M60 446 H110"/><path d="${zig(110, 446)}"/><path d="M194 446 H240"/><path d="M240 428 V464 L272 446 Z"/><path d="M272 428 V464"/><path d="M272 446 H330 V452"/><path d="${gnd(330, 452)}"/>
+    <!-- button to GND -->
+    <path d="M480 446 H554"/><circle cx="560" cy="446" r="6"/><circle cx="640" cy="446" r="6"/><path d="M563 442 L630 420"/><path d="M646 446 H700 V452"/><path d="${gnd(700, 452)}"/>
   </g>
-  <path d="M345 310 l-10 -4 v8 z" fill="${INK}"/>
-  <g fill="none" stroke="${INK}" stroke-width="4" stroke-linejoin="round" stroke-linecap="round">
-    <!-- LED branch -->
-    <path d="M60 440 H110"/><path d="${zig(110, 440)}"/><path d="M194 440 H240 M240 420 V460 L272 440 Z M272 420 V460 M272 440 H330 V458"/><path d="${gnd(330, 458)}"/>
-    <!-- button branch -->
-    <path d="M480 440 H560"/><circle cx="560" cy="440" r="6"/><circle cx="640" cy="440" r="6"/><path d="M560 440 L632 416"/><path d="M646 440 H700 V458"/><path d="${gnd(700, 458)}"/>
+  <path d="M446 308 l12 -6 v12 z" fill="${INK}"/>
+  <g fill="none" stroke="${ACCENT}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M254 420 L268 404 M260 404 H268 V412"/><path d="M270 422 L284 406 M276 406 H284 V414"/>
   </g>
-  <g fill="${INK}"><circle cx="60" cy="46" r="7"/><circle cx="500" cy="70" r="7"/><circle cx="60" cy="300" r="7"/><circle cx="250" cy="300" r="5"/><circle cx="430" cy="258" r="5"/><circle cx="500" cy="190" r="5"/><circle cx="430" cy="190" r="5"/><circle cx="580" cy="190" r="5"/><circle cx="60" cy="440" r="7"/><circle cx="480" cy="440" r="7"/><circle cx="420" cy="70" r="5"/></g>
+  <g fill="${INK}">
+    <circle cx="60" cy="40" r="7"/><circle cx="500" cy="55" r="7"/><circle cx="420" cy="55" r="5"/>
+    <circle cx="410" cy="168" r="7"/><circle cx="470" cy="168" r="5"/><circle cx="550" cy="168" r="5"/><circle cx="470" cy="262" r="5"/>
+    <circle cx="60" cy="330" r="7"/><circle cx="360" cy="330" r="5"/><circle cx="60" cy="446" r="7"/><circle cx="480" cy="446" r="7"/>
+  </g>
   <g fill="${INK}" font-size="20" font-weight="600">
-    <text x="48" y="38" text-anchor="end">3V3</text>
-    <text x="215" y="46" text-anchor="middle">capacitive soil</text><text x="215" y="70" text-anchor="middle">moisture sensor</text><text x="215" y="94" text-anchor="middle" font-size="16" opacity="0.7">VCC · AOUT · GND</text>
-    <text x="518" y="76">IO34 (ADC)</text><text x="440" y="108">100 kΩ</text>
-    <text x="48" y="308" text-anchor="end">IO25</text><text x="152" y="348" text-anchor="middle">100 Ω</text><text x="270" y="346">10 kΩ</text>
-    <text x="300" y="268" text-anchor="end">N-MOSFET</text><text x="300" y="290" text-anchor="end" font-size="16" opacity="0.7">logic level</text>
-    <text x="474" y="244" text-anchor="end">pump</text><text x="520" y="236" font-size="16" opacity="0.7">flyback</text><text x="520" y="256" font-size="16" opacity="0.7">diode</text>
-    <text x="610" y="226">470 µF</text><text x="540" y="182" text-anchor="end">5V</text>
-    <text x="48" y="448" text-anchor="end">IO26</text><text x="152" y="488" text-anchor="middle">330 Ω</text><text x="256" y="484" text-anchor="middle">LED</text>
-    <text x="468" y="448" text-anchor="end">IO27</text><text x="600" y="408" text-anchor="middle">button</text>
+    <text x="48" y="47" text-anchor="end">3V3</text>
+    <text x="215" y="40" text-anchor="middle">capacitive soil</text><text x="215" y="64" text-anchor="middle">moisture sensor</text>
+    <text x="512" y="62">IO34 (ADC)</text><text x="438" y="90">100 kΩ</text>
+    <text x="398" y="175" text-anchor="end">5V (USB)</text>
+    <text x="470" y="213" text-anchor="middle" font-weight="700">M</text><text x="440" y="212" text-anchor="end">pump</text>
+    <text x="574" y="216">1N5819</text><text x="748" y="226">470 µF</text>
+    <text x="48" y="337" text-anchor="end">IO25</text><text x="152" y="374" text-anchor="middle">100 Ω</text><text x="378" y="366">10 kΩ</text>
+    <text x="488" y="314">IRLZ44N</text>
+    <text x="48" y="453" text-anchor="end">IO26</text><text x="152" y="490" text-anchor="middle">330 Ω</text><text x="256" y="490" text-anchor="middle">LED</text>
+    <text x="468" y="453" text-anchor="end">IO27</text><text x="600" y="412" text-anchor="middle">button</text>
   </g>
-  <g fill="${ACCENT}" font-size="17" font-weight="700"><text x="402" y="20" text-anchor="middle">0 V if the wire is off</text><text x="600" y="340" font-size="16"> </text></g>
-  <g fill="${INK}" font-size="17" opacity="0.75"><text x="362" y="340">source to GND</text><text x="352" y="196" text-anchor="end">pump: 5 V from USB</text></g>`,
-'Schematic: 3.3 V powers a soil sensor whose output goes to IO34 with a 100 kilohm pull-down; IO25 drives a logic-level MOSFET through 100 ohms with a 10 kilohm pull-down; the MOSFET switches a pump from 5 volts, with a diode across the pump and a capacitor on the supply; IO26 drives an LED through 330 ohms; IO27 reads a button to ground');
+  <g fill="${INK}" font-size="17" opacity="0.75">
+    <text x="215" y="87" text-anchor="middle">VCC · AOUT · GND</text>
+    <text x="488" y="184">+</text><text x="488" y="246">−</text><text x="574" y="236">flyback</text><text x="746" y="196">+</text>
+    <text x="420" y="296" text-anchor="end">G</text><text x="478" y="280">D</text><text x="480" y="362">S</text>
+    <text x="488" y="336">logic-level N-MOSFET</text>
+  </g>
+  <g fill="${ACCENT}" font-size="16" font-weight="700"><text x="452" y="134">wire off → reads ≈ 0 V</text></g>`,
+'Schematic: 3.3 volts powers a soil sensor whose output goes to IO34 with a 100 kilohm pull-down to ground. IO25 drives the gate of a logic-level MOSFET through 100 ohms, with 10 kilohms from gate to ground. The pump sits between 5 volts and the MOSFET drain; the source goes to ground. A 1N5819 diode across the pump has its cathode on 5 volts. A 470 microfarad capacitor joins 5 volts and ground. IO26 drives an LED through 330 ohms; IO27 reads a button to ground');
 
+/* States: boxes in one row, every arrow ends on a box edge, every label sits above its own line. */
 const plantStates = svgWrap(860, 210, `
-  <defs><marker id="ap" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="${INK}"/></marker></defs>
+  <defs><marker id="ap" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" refX="11" refY="6" orient="auto"><path d="M0 0 L12 6 L0 12 Z" fill="${INK}"/></marker></defs>
   <g stroke="${INK}" stroke-width="3" fill="none">
-    <rect x="10" y="30" width="180" height="74" rx="14" fill="#e9e1c8"/>
-    <rect x="236" y="30" width="180" height="74" rx="14" fill="#c9e3f2"/>
-    <rect x="462" y="30" width="180" height="74" rx="14" fill="#d9e3c4"/>
-    <rect x="688" y="30" width="162" height="74" rx="14" fill="#f3b7a8"/>
-    <path d="M192 67 H234" marker-end="url(#ap)"/><path d="M418 67 H460" marker-end="url(#ap)"/>
-    <path d="M552 106 V158 H100 V108" marker-end="url(#ap)"/>
-    <path d="M644 54 H686" marker-end="url(#ap)" stroke-dasharray="6 5"/>
-    <path d="M520 28 V12 H326 V28" marker-end="url(#ap)"/>
-    <path d="M769 106 V186 H100" stroke-dasharray="6 5"/>
+    <rect x="10" y="40" width="170" height="70" rx="14" fill="#e9e1c8"/>
+    <rect x="230" y="40" width="170" height="70" rx="14" fill="#c9e3f2"/>
+    <rect x="450" y="40" width="170" height="70" rx="14" fill="#d9e3c4"/>
+    <rect x="680" y="40" width="170" height="70" rx="14" fill="#f3b7a8"/>
+    <path d="M180 75 H229" marker-end="url(#ap)"/>
+    <path d="M400 75 H449" marker-end="url(#ap)"/>
+    <path d="M535 40 V30 H315 V39" marker-end="url(#ap)"/>
+    <path d="M620 75 H679" marker-end="url(#ap)" stroke-dasharray="7 5"/>
+    <path d="M535 110 V140 H95 V111" marker-end="url(#ap)"/>
+    <path d="M765 110 V174 H50 V111" marker-end="url(#ap)"/>
   </g>
-  <g fill="${INK}" font-size="21" font-weight="700" text-anchor="middle">
-    <text x="100" y="62">IDLE</text><text x="326" y="62">WATERING</text><text x="552" y="62">SOAKING</text><text x="769" y="62">LOCKED</text>
+  <g fill="${INK}" font-size="20" font-weight="700" text-anchor="middle">
+    <text x="95" y="70">IDLE</text><text x="315" y="70">WATERING</text><text x="535" y="70">SOAKING</text><text x="765" y="70">LOCKED</text>
   </g>
-  <g fill="${INK}" font-size="15" text-anchor="middle">
-    <text x="100" y="86">pump off · reads</text><text x="326" y="86">pump on · 3 s</text><text x="552" y="86">pump off · 60 s</text><text x="769" y="86">pump off · saved</text>
-    <text x="213" y="58">dry</text><text x="439" y="58">3 s</text>
-    <text x="326" y="6">gaining but still dry: next pulse</text>
-    <text x="326" y="152">wet enough: back to IDLE</text>
-    <text x="436" y="203" font-size="14">any fault: sensor, no response, time limit. Button clears it.</text>
-  </g>`,
-'States: idle waits for dry soil; watering pumps three seconds; soaking waits sixty seconds then measures; if wet enough it returns to idle, if gaining but dry it pumps again, and any fault leads to locked, which only the button clears');
+  <g fill="${INK}" font-size="17" text-anchor="middle">
+    <text x="95" y="96">pump off · reads</text><text x="315" y="96">pump on · 3 s</text><text x="535" y="96">pump off · 60 s</text><text x="765" y="96">pump off · saved</text>
+    <text x="204" y="64">dry</text><text x="424" y="64">3 s</text><text x="649" y="64">fault</text>
+    <text x="425" y="20">gaining but still dry: one more pulse</text>
+    <text x="315" y="133">wet enough: back to IDLE</text>
+    <text x="408" y="167">button, only if the sensor reads valid values</text>
+  </g>
+  <g fill="${INK}" font-size="16" text-anchor="middle" opacity="0.8"><text x="430" y="201">A fault in any state goes to LOCKED. The pump runs only in WATERING.</text></g>`,
+'States: idle waits for dry soil; watering pumps three seconds; soaking waits sixty seconds and measures. Wet enough goes back to idle, gaining but still dry pumps again, and a fault in any state goes to locked. Only the button, with a valid sensor, goes from locked back to idle. The pump runs only in watering');
 
 export const ESP32_PLANT_PAGE = {
   eyebrow: 'CHAPTER 2  ·  MEASURE, DECIDE, SWITCH',
@@ -162,8 +193,7 @@ export const ESP32_PLANT_PAGE = {
   pageNumber: 3,
   blocks: [
     { type: 'p', text: 'A sensor measures the soil. When it is dry the ESP32 pumps for 3 s, waits 60 s and measures again. Any fault locks the pump off until you press the button.' },
-    { type: 'h', text: 'YOU WILL NEED (FULL LIST IN THE NOTEBOOK)' },
-    { type: 'bullets', items: ['ESP32-DevKitC, 5 V 2 A charger, LED, button', 'Soil sensor, 5 V pump, IRLZ44N, 1N5819, 470 µF'] },
+    { type: 'p', text: 'Parts: ESP32-DevKitC, soil sensor, 5 V pump, IRLZ44N, 1N5819, 470 µF, LED, button (full list in the notebook).' },
     { type: 'h', text: 'SCHEMATIC (GPIO NAMES)' },
     { type: 'svg', svg: plantSchematic, w: 860, h: 500 },
     { type: 'h', text: 'STATES' },

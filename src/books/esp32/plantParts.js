@@ -92,7 +92,7 @@ export const CONNECTIONS = [
   { from: '470 µF capacitor', to: 'long leg (+) in the 5V rail, short leg (−) in the GND rail', note: 'smooths the pump start', net: 'cap' },
   { from: 'GPIO26 (IO26)', to: 'column 22 (row j). 330 Ω from column 22 to column 26 (row i)', note: '', net: 'ledr' },
   { from: 'LED', to: 'long leg (anode) in column 26, short leg in column 25 (row f). Jumper from column 25 (row j) to the GND rail', note: '', net: 'led' },
-  { from: 'GPIO27 (IO27)', to: 'column 28 (row j). Button legs in columns 28 and 30 (rows g and i). Jumper from column 30 (row j) to the GND rail', note: 'INPUT_PULLUP: pressed = LOW', net: 'button' },
+  { from: 'GPIO27 (IO27)', to: 'column 28 (row j). Button legs in columns 28 and 30 (rows g and i). Jumper from column 30 (row j) to the GND rail', note: 'INPUT_PULLUP: pressed = LOW. Each always-joined pair of legs in one column', net: 'button' },
   { from: 'ESP32 GND', to: 'GND rail', note: 'common ground', net: 'espgnd' },
   { from: 'ESP32 5V pin', to: '5V rail', note: 'USB 5 V for the pump', net: 'esp5v' },
 ];

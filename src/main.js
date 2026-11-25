@@ -258,6 +258,7 @@ function mountCurrent() {
   const lesson = LESSONS[current];
   shell.setLesson(lesson, current, N, activeDef);
   runtimes[current].mountUI(shell.tabs);
+  buildCamBar();
   const body = $('#tabBody');
   body.classList.remove('swap');
   void body.offsetWidth;
@@ -499,12 +500,100 @@ function exitLeftPage() {
 }
 $('#leftPageBtn').addEventListener('click', enterLeftPage);
 $('#leftBack').addEventListener('click', exitLeftPage);
+// zoom buttons (same range as the mouse wheel): small diagram labels become readable at 2x to 3x
+const zoomLeft = (k) => {
+  if (!leftView) return;
+  leftView.zoom = clamp(leftView.zoom * k, 0.3, 1.2);
+  applyLeftFraming();
+};
+$('#leftZoomIn').addEventListener('click', () => zoomLeft(0.75));
+$('#leftZoomOut').addEventListener('click', () => zoomLeft(1 / 0.75));
 leftNotebookBtn.addEventListener('click', () => {
   if (!leftView) return;
   leftView.notebookHidden = !leftView.notebookHidden;
   updateLeftBar();
   applyLeftFraming();
 });
+
+/* ------------------------------------------------------------------ camera bar: the chapter's views + play / pause */
+// Always reachable above the 3D view. It slides away while the user scrolls (wheel zoom or the notebook) and comes
+// back on the next pointer move, tap, key press or focus. Play / pause shows only if the chapter runtime offers
+// isRunning() / setRunning(on).
+const camBar = $('#camBar');
+const camViews = $('#camViews');
+const camPlay = $('#camPlay');
+const leftMask = $('#leftMask');
+let camAway = false;
+let lastScrollAt = -1e9;
+let camState = { view: '', play: '' };
+function buildCamBar() {
+  camViews.replaceChildren(...LESSONS[current].viewButtons.map(([v, t]) => {
+    const b = document.createElement('button');
+    b.className = 'cam-btn';
+    b.dataset.view = v;
+    b.textContent = t;
+    b.setAttribute('aria-pressed', 'false');
+    b.addEventListener('click', () => userView(v));
+    return b;
+  }));
+  camState = { view: '', play: '' };
+}
+camPlay.addEventListener('click', () => {
+  const rt = runtimes[current];
+  if (!turn && rt.setRunning) rt.setRunning(!rt.isRunning());
+});
+const hideCamBar = () => {
+  lastScrollAt = performance.now();
+  if (!camAway) {
+    camAway = true;
+    camBar.classList.add('away');
+  }
+};
+const showCamBar = (force) => {
+  if (camAway && (force === true || performance.now() - lastScrollAt > 600)) {
+    camAway = false;
+    camBar.classList.remove('away');
+  }
+};
+canvas.addEventListener('wheel', hideCamBar, { passive: true });
+$('#tabBody').addEventListener('scroll', hideCamBar, { passive: true });
+$('#panel').addEventListener('scroll', hideCamBar, { passive: true });
+for (const ev of ['pointermove', 'pointerdown', 'keydown']) window.addEventListener(ev, showCamBar, { passive: true });
+camBar.addEventListener('focusin', () => showCamBar(true));
+
+/** Per frame: visibility, position next to the notebook, play label, highlighted view, left page mask. */
+function updateCamBar(amt) {
+  const show = bookIsOpen() && !reading && !leftView && !turn && !libraryOpen;
+  if (camBar.hidden === show) camBar.hidden = !show;
+  if (show) {
+    camBar.style.right = isNarrow() ? '0px' : `${(panelW() * amt).toFixed(1)}px`;
+    const rt = runtimes[current];
+    const playing = !!rt.setRunning && rt.isRunning();
+    const key = rt.setRunning ? (playing ? 'on' : 'off') : 'none';
+    if (camState.play !== key) {
+      camState.play = key;
+      camPlay.hidden = key === 'none';
+      camPlay.textContent = playing ? '❚❚ Pause' : '▶ Play';
+      camPlay.setAttribute('aria-pressed', String(playing));
+      camPlay.setAttribute('aria-label', playing ? 'Pause the simulation' : 'Play the simulation');
+    }
+    if (camState.view !== currentViewName) {
+      camState.view = currentViewName;
+      for (const b of camViews.children) b.setAttribute('aria-pressed', String(b.dataset.view === currentViewName));
+    }
+  }
+  // left page view: cover everything but the left page (x -11..0, z -7..7), so a wide screen does not show the right page
+  const mask = !!leftView && leftFactor > 0.6;
+  if (leftMask.hidden === mask) leftMask.hidden = !mask;
+  if (mask) {
+    const a = new THREE.Vector3(-11, 0, -7).project(camera), b = new THREE.Vector3(0, 0, 7).project(camera);
+    const x1 = (a.x * 0.5 + 0.5) * size.w, y1 = (-a.y * 0.5 + 0.5) * size.h, x2 = (b.x * 0.5 + 0.5) * size.w, y2 = (-b.y * 0.5 + 0.5) * size.h;
+    Object.assign(leftMask.style, {
+      left: `${Math.min(x1, x2).toFixed(1)}px`, top: `${Math.min(y1, y2).toFixed(1)}px`,
+      width: `${Math.abs(x2 - x1).toFixed(1)}px`, height: `${Math.abs(y2 - y1).toFixed(1)}px`,
+    });
+  }
+}
 
 /* ------------------------------------------------------------------ pointer input: orbit, zoom, 3D controls, page corners */
 const raycaster = new THREE.Raycaster();
@@ -833,6 +922,7 @@ function frame() {
   updateRig(dt);
   camera.updateMatrixWorld();
   updateLabels();
+  updateCamBar(amt);
 
   // page corners: a curled corner invites the turn (only in a direction that exists); stronger on hover / focus
   const canTurn = canTurnNow();
