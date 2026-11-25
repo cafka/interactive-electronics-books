@@ -166,9 +166,10 @@ const rig = {
 };
 const GLOBAL_VIEWS = {
   closed: { t: [5.6, 0, 0], r: 26, phi: 0.8, theta: 0.35 },
-  book: { t: [0, 0, 0.5], r: 25, phi: 0.75, theta: 0 },
+  book: { t: [0, 0, 0.5], r: 25, phi: 0.75, theta: 0, fit: 'book' },
 };
 const size = { w: 1, h: 1 };
+let panelAmt = 0; // 0 notebook hidden .. 1 notebook fully shown (set every frame)
 const isNarrow = () => size.w <= 900;
 const panelW = () => 436;
 const sheetH = () => size.h * 0.52;
@@ -188,12 +189,73 @@ function fitFor(name) {
   const aspect = open ? (size.w - panelW()) / size.h : size.w / size.h;
   return Math.max(1, 1.75 / aspect);
 }
+/*
+ * Views with fit: 'book' (the shared "Whole book" view, and any chapter view that shows the whole project) get the
+ * camera distance at which the open book and everything built on it just fill the free area: the window minus the
+ * notebook, the camera bar and a small margin. It is recomputed on resize, so the book follows the window size.
+ */
+const fitCam = new THREE.PerspectiveCamera();
+// runtime -> corners of the boxes of each top-level part of its built scene (measured once its pop-in has finished).
+// Per-part boxes, not one box for the whole scene: a single box would add empty corners (a "tall part" at the front).
+const contentBoxes = new Map();
+const fitTmp = new THREE.Vector3();
+const boxCorners = (b) => {
+  const out = [];
+  for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) out.push(new THREE.Vector3(x, y, z));
+  return out;
+};
+function measureContent(root) {
+  root.updateMatrixWorld(true);
+  const pts = [];
+  const b = new THREE.Box3();
+  for (const child of root.children) {
+    if (!child.visible || child.isPoints || child.isSprite) continue; // particles and glows follow the parts
+    b.setFromObject(child);
+    if (!b.isEmpty() && Number.isFinite(b.min.x)) pts.push(...boxCorners(b));
+  }
+  return pts;
+}
+function fitDistance(v) {
+  const pts = boxCorners(new THREE.Box3(new THREE.Vector3(-11.25, -1.1, -7.25), new THREE.Vector3(11.25, 0.05, 7.25)));
+  const cp = runtimes[current] && contentBoxes.get(runtimes[current]);
+  if (cp) pts.push(...cp);
+  else pts.push(new THREE.Vector3(10, 3.5, -6), new THREE.Vector3(2, 3.5, -6)); // until measured: room for tall parts
+  const narrow = isNarrow();
+  const ox = narrow ? 0 : panelW() / 2, oy = narrow ? sheetH() / 2 : 0; // the same view offset the frame loop applies
+  const area = narrow ? { l: 8, r: size.w - 8, t: 100, b: size.h - sheetH() - 8 } : { l: 16, r: size.w - panelW() - 16, t: 72, b: size.h - 24 };
+  fitCam.fov = DEFAULT_FOV;
+  fitCam.aspect = size.w / size.h;
+  fitCam.near = 0.1;
+  fitCam.far = 600;
+  fitCam.updateProjectionMatrix();
+  const t = new THREE.Vector3(...v.t);
+  const fits = (r) => {
+    fitCam.position.set(t.x + r * Math.sin(v.phi) * Math.sin(v.theta), t.y + r * Math.cos(v.phi), t.z + r * Math.sin(v.phi) * Math.cos(v.theta));
+    fitCam.lookAt(t);
+    fitCam.updateMatrixWorld();
+    for (const p of pts) {
+      fitTmp.copy(p).project(fitCam);
+      if (fitTmp.z >= 1) return false;
+      const sx = (fitTmp.x * 0.5 + 0.5) * size.w - ox, sy = (-fitTmp.y * 0.5 + 0.5) * size.h - oy;
+      if (sx < area.l || sx > area.r || sy < area.t || sy > area.b) return false;
+    }
+    return true;
+  };
+  let lo = 4, hi = 220;
+  if (!fits(hi)) return hi;
+  for (let k = 0; k < 30; k++) {
+    const mid = (lo + hi) / 2;
+    if (fits(mid)) hi = mid;
+    else lo = mid;
+  }
+  return hi;
+}
 function setView(name, instant = false) {
   const v = viewDef(name);
   currentViewName = name;
   const fit = fitFor(name);
   rig.goalTarget.set(...v.t);
-  rig.goalR = v.r * fit;
+  rig.goalR = v.fit === 'book' ? fitDistance(v) : v.r * fit;
   rig.goalPhi = v.phi;
   rig.goalTheta = v.theta;
   rig.goalFov = DEFAULT_FOV;
@@ -538,6 +600,14 @@ function buildCamBar() {
   }));
   camState = { view: '', play: '' };
 }
+const camLabels = $('#camLabels');
+camLabels.addEventListener('click', () => {
+  // auto -> on click -> off -> auto; choosing a visible mode also turns the notebook's "Show labels" option back on
+  const next = LABEL_MODES[(LABEL_MODES.indexOf(labelMode()) + 1) % LABEL_MODES.length];
+  options.labelMode = next === 'off' ? options.labelMode : next;
+  options.labels = next !== 'off';
+  selectedLabel = null;
+});
 camPlay.addEventListener('click', () => {
   const rt = runtimes[current];
   if (!turn && rt.setRunning) rt.setRunning(!rt.isRunning());
@@ -565,6 +635,13 @@ camBar.addEventListener('focusin', () => showCamBar(true));
 function updateCamBar(amt) {
   const show = bookIsOpen() && !reading && !leftView && !turn && !libraryOpen;
   if (camBar.hidden === show) camBar.hidden = !show;
+  if (camLabels.hidden === show) camLabels.hidden = !show;
+  const lm = labelMode(); // kept up to date even while the bar is hidden (page turn, reading)
+  if (camState.labels !== lm) {
+    camState.labels = lm;
+    camLabels.textContent = LABEL_MODE_TEXT[lm];
+    camLabels.setAttribute('aria-label', `${LABEL_MODE_TEXT[lm]}. Press to change.`);
+  }
   if (show) {
     camBar.style.right = isNarrow() ? '0px' : `${(panelW() * amt).toFixed(1)}px`;
     const rt = runtimes[current];
@@ -676,8 +753,10 @@ canvas.addEventListener('pointermove', (e) => {
     if (e.pointerType === 'mouse' && !drag) {
       const picked = pickAt(e);
       hoverZone = picked ? null : pageZoneAt(e);
+      hoverLabel = hoverZone ? null : nearestLabel(e.clientX, e.clientY, 22);
       canvas.classList.toggle('pick', picked);
       canvas.classList.toggle('turn', !!hoverZone);
+      canvas.classList.toggle('info', !picked && !hoverZone && !!hoverLabel);
     }
     return;
   }
@@ -722,6 +801,11 @@ const endPointer = (e) => {
       hoverZone = null;
       canvas.classList.remove('turn');
       goTo(zone === 'next' ? current + 1 : current - 1);
+    } else if (click && bookIsOpen()) {
+      // a click on a part shows its label (a second click, or a click elsewhere, hides it again)
+      const l = nearestLabel(e.clientX, e.clientY, e.pointerType === 'mouse' ? 30 : 44);
+      lastLabelClick = { x: e.clientX, y: e.clientY, found: l?.title ?? null, before: selectedLabel?.title ?? null, same: l === selectedLabel };
+      selectedLabel = l && l !== selectedLabel ? l : null;
     }
   }
 };
@@ -729,7 +813,8 @@ for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.ad
 canvas.addEventListener('pointerleave', () => {
   if (drag) return;
   hoverZone = null;
-  canvas.classList.remove('turn', 'pick');
+  hoverLabel = null;
+  canvas.classList.remove('turn', 'pick', 'info');
 });
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
@@ -790,27 +875,121 @@ function updateTags(panelPx, sheetPx) {
 }
 
 /* ------------------------------------------------------------------ labels (one set per lesson, built with the book) */
+/*
+ * Floating labels (the DOM tags; the printed text on the 3D models is part of their textures and is not touched).
+ * Modes, shared by every chapter: 'auto' shows as many labels as fit without overlapping each other, the notebook,
+ * the camera bar or the anchor points of other parts; the rest shrink to their dot. 'select' shows only dots.
+ * 'off' hides them. In every mode a click (or a hover with the mouse) on a part shows its label.
+ * Priority: the order of the chapter's label list; labels marked hideNarrow come last.
+ */
 const proj = new THREE.Vector3();
+const LABEL_MODES = ['auto', 'select', 'off'];
+const LABEL_MODE_TEXT = { auto: 'Labels: auto', select: 'Labels: on click', off: 'Labels: off' };
+options.labelMode = 'auto';
+let selectedLabel = null;
+let hoverLabel = null;
+let lastLabelClick = null;
+const labelMode = () => (options.labels ? options.labelMode : 'off');
+const labelsLive = (i) => i === current && !turn && !leftView && bookP > 0.99 && pops[i] >= runtimes[i].popDuration - 0.05;
+const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+/** The label whose anchor is nearest to a screen point (within maxPx), or null. */
+function nearestLabel(x, y, maxPx) {
+  if (!labelsLive(current)) return null;
+  let best = null, bd = maxPx;
+  for (const l of labelSets[current]) {
+    if (l.sx == null) continue;
+    const d = Math.hypot(l.sx - x, l.sy - y);
+    if (d < bd) {
+      bd = d;
+      best = l;
+    }
+  }
+  return best;
+}
+function placeLabel(l, side, collapsed, selected) {
+  l.el.classList.remove('hidden');
+  l.el.classList.toggle('left', side === 'left');
+  l.el.classList.toggle('collapsed', collapsed);
+  l.el.classList.toggle('selected', selected);
+  l.el.style.zIndex = selected ? '3' : collapsed ? '1' : '2';
+  const shift = side === 'left' ? 'translate(calc(-100% + 4.5px), -50%)' : 'translate(-4.5px, -50%)';
+  l.el.style.transform = `translate(${l.sx.toFixed(1)}px, ${l.sy.toFixed(1)}px) ${shift}`;
+}
 function updateLabels() {
   labelSets.forEach((set, i) => {
-    const rt = runtimes[i];
-    const show = i === current && options.labels && !turn && !leftView && bookP > 0.99 && pops[i] >= rt.popDuration - 0.05;
-    for (const l of set) {
-      if (!show) {
+    if (!labelsLive(i)) {
+      for (const l of set) {
         l.el.classList.add('hidden');
+        l.sx = null;
+      }
+      return;
+    }
+    if (selectedLabel && !set.includes(selectedLabel)) selectedLabel = null;
+    if (hoverLabel && !set.includes(hoverLabel)) hoverLabel = null;
+    const mode = labelMode();
+    const vis = [];
+    for (const l of set) {
+      proj.copy(l.at).project(camera);
+      if (proj.z >= 1 || Math.abs(proj.x) > 1.02 || Math.abs(proj.y) > 1.02) {
+        l.el.classList.add('hidden');
+        l.sx = null;
         continue;
       }
-      proj.copy(l.at).project(camera);
-      const x = (proj.x * 0.5 + 0.5) * size.w;
-      const y = (-proj.y * 0.5 + 0.5) * size.h;
-      l.el.classList.toggle('hidden', proj.z >= 1 || !!(l.hideNarrow && isNarrow())); // hideNarrow: secondary labels give way on phones
-      const shift = l.side === 'left' ? 'translate(calc(-100% + 4.5px), -50%)' : 'translate(-4.5px, -50%)';
-      l.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) ${shift}`;
+      l.sx = (proj.x * 0.5 + 0.5) * size.w;
+      l.sy = (-proj.y * 0.5 + 0.5) * size.h;
       const sub = typeof l.sub === 'function' ? l.sub() : l.sub;
       if (sub !== l.last) {
         l.subEl.innerHTML = sub;
+        if (!l.last || sub.length !== l.last.length) l.w = 0; // remeasure only when the text length changes
         l.last = sub;
       }
+      vis.push(l);
+    }
+    // areas a label must not cover: the notebook, the camera bar, and the anchor points of the other parts
+    const blocked = [];
+    const tops = [];
+    if (!camBar.hidden && !camBar.classList.contains('away')) tops.push(camViews, camPlay);
+    if (!camLabels.hidden) tops.push(camLabels, libraryBtn);
+    for (const el of tops) {
+      if (el.hidden) continue;
+      const r = el.getBoundingClientRect();
+      blocked.push({ x: r.left - 6, y: r.top - 6, w: r.width + 12, h: r.height + 12 });
+    }
+    const nb = isNarrow() ? { x: 0, y: size.h - sheetH() * panelAmt, w: size.w, h: size.h } : { x: size.w - (panelW() + 20) * panelAmt, y: 0, w: size.w, h: size.h };
+    if (panelAmt > 0.05) blocked.push(nb);
+    const dots = vis.map((l) => ({ l, r: { x: l.sx - 8, y: l.sy - 8, w: 16, h: 16 } }));
+    const rank = (l) => (l === selectedLabel ? -2 : l === hoverLabel ? -1 : l.hideNarrow ? 1 : 0);
+    const order = vis.map((l, k) => [l, k]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map((a) => a[0]);
+    const placed = [];
+    for (const l of order) {
+      const pinned = l === selectedLabel || l === hoverLabel;
+      if (mode === 'off' && !pinned) {
+        l.el.classList.add('hidden');
+        continue;
+      }
+      if (!l.w) {
+        // measure with the tag laid out (a collapsed tag keeps its size, it is only invisible)
+        l.w = l.el.offsetWidth;
+        l.h = l.el.offsetHeight;
+      }
+      let side = l.side, ok = pinned;
+      if (mode === 'auto' && !pinned && !(l.hideNarrow && isNarrow())) {
+        for (const s of [l.side, l.side === 'left' ? 'right' : 'left']) {
+          const x = s === 'left' ? l.sx - l.w + 4.5 : l.sx - 4.5;
+          const r = { x, y: l.sy - l.h / 2, w: l.w, h: l.h };
+          const inside = r.x >= 4 && r.y >= 4 && r.x + r.w <= size.w - 4 && r.y + r.h <= size.h - 4;
+          if (inside && !placed.some((p) => overlaps(p, r)) && !blocked.some((p) => overlaps(p, r)) && !dots.some((d) => d.l !== l && overlaps(d.r, r))) {
+            side = s;
+            ok = true;
+            placed.push(r);
+            break;
+          }
+        }
+      } else if (pinned) {
+        const x = side === 'left' ? l.sx - l.w + 4.5 : l.sx - 4.5;
+        placed.push({ x, y: l.sy - l.h / 2, w: l.w, h: l.h });
+      }
+      placeLabel(l, side, !ok, l === selectedLabel);
     }
   });
 }
@@ -901,6 +1080,11 @@ function frame() {
     const goal = buildAllowed && i === current;
     pops[i] = clamp(pops[i] + (goal ? dt : -dt * 4.5), 0, rt.popDuration + 0.4);
     rt.setPop(pops[i]);
+    if (pops[i] >= rt.popDuration && !contentBoxes.has(rt)) {
+      // the scene is fully built: measure it once, and refit a whole-book view the user has not moved
+      contentBoxes.set(rt, measureContent(rt.root));
+      if (i === current && !userTouched && !leftView && viewDef(currentViewName).fit) setView(currentViewName);
+    }
     if (pops[i] > 0) rt.update(time, dt, camera, renderer.domElement.height);
   });
   runtimes[current].frameUI(now);
@@ -910,6 +1094,7 @@ function frame() {
   leftFactor += ((leftView ? 1 : 0) - leftFactor) * (1 - Math.exp(-dt * 6));
   leftHide += ((leftView && leftView.notebookHidden ? 1 : 0) - leftHide) * (1 - Math.exp(-dt * 7));
   const amt = smoothstep(0.4, 0.95, bookP) * (1 - readFactor) * (1 - leftHide);
+  panelAmt = amt;
   const panel = $('#panel');
   panel.style.transform = `translate${isNarrow() ? 'Y' : 'X'}(calc(${(1 - amt).toFixed(4)} * (100% + 40px)))`;
   panel.style.visibility = amt <= 0.001 ? 'hidden' : 'visible';
@@ -943,6 +1128,8 @@ window.book3d = {
   get current() { return current; },
   get turning() { return !!turn; },
   get leftView() { return !!leftView; },
+  /** Test helper: pointer and label selection state. */
+  get debugPointer() { return { pressPointer, drag: !!drag, selected: selectedLabel?.title ?? null, hover: hoverLabel?.title ?? null, lastLabelClick }; },
   rig,
   enterLeftPage, exitLeftPage, measureLeftPage: (i) => measureLeftPage(LESSONS[i].pageContent),
   /** Test helper: jump the camera straight to its goals (software rendering is slow, real GPUs glide). */

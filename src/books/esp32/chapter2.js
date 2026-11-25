@@ -280,7 +280,7 @@ export default {
   viewButtons,
   views: {
     // whole project: the complete open book (x -11..11, z -7..7, parts up to 3.5 high), centred, seen from the reader's side
-    circuit: { t: [0, 0.6, 0.4], r: 27, phi: 0.74, theta: 0 },
+    circuit: { t: [0, 0.6, 0.4], r: 27, phi: 0.74, theta: 0, fit: 'book' },
     assembly: { t: [7.0, 1.0, -1.4], r: 17, phi: 0.84, theta: 0.12 },
     wiring: { t: [5.6, 0.6, 1.2], r: 10.5, phi: 0.72, theta: 0 },
     pins: { t: [4.6, 0.6, -2.4], r: 6.4, phi: 0.78, theta: 0.1 },

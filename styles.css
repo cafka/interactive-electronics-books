@@ -43,6 +43,20 @@ body {
 .label .tag span { color: #b9c3de; font-size: 11px; }
 .label.left { flex-direction: row-reverse; }
 .label.hidden { opacity: 0; }
+/* a label that does not fit without overlapping keeps only its dot; hover or click the part to read it */
+.label.collapsed .tag { visibility: hidden; }
+.label.collapsed .dot { box-shadow: 0 0 0 2px rgba(14,20,40,0.9), 0 0 0 4px rgba(216,178,90,0.55); }
+.label.selected .tag { border-color: #ffd27a; box-shadow: 0 0 0 2px rgba(255,210,122,0.35); }
+#scene.info { cursor: help; }
+/* label mode switch: under the Library button, outside the camera bar */
+.labels-btn {
+  position: fixed; top: 58px; left: 12px; z-index: 8; padding: 7px 12px; cursor: pointer; font: 600 12px var(--sans);
+  color: #f3ecd6; background: rgba(14,20,40,0.82); border: 1px solid rgba(216,178,90,0.45); border-radius: 999px;
+}
+.labels-btn[hidden] { display: none; }
+.labels-btn:hover { background: rgba(40,52,90,0.95); }
+.labels-btn:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+@media (max-width: 900px) { .labels-btn { top: 8px; left: auto; right: 8px; } }
 .label .val { color: #ffcf6b; font-weight: 700; }
 
 /* ---------- intro ---------- */
