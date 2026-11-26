@@ -1,0 +1,4 @@
+# Binary files: never convert line endings (core.autocrlf would corrupt them on checkout)
+*.bin binary
+*.png binary
+*.jpg binary
