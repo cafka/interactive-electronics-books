@@ -216,6 +216,7 @@ export function createShell({ onPrev, onNext, onCloseBook }) {
       prev.disabled = busy || index === 0;
       next.disabled = busy || index === total - 1;
       $('#readBtn').disabled = busy;
+      for (const id of ['#expandBtn', '#guideBtn']) if ($(id)) $(id).disabled = busy;
       $('#panel').classList.toggle('turning', busy);
     },
   };

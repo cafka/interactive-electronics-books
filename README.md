@@ -34,8 +34,11 @@ Opening `index.html` directly with `file://` will not work because ES modules ne
 - **From the book itself:** each bottom page corner is a curled sheet of paper (with its back side and a shadow) that lifts and settles gently; it lifts more on hover or keyboard focus. A **Next ›** / **‹ Previous** tag sits next to the corner (a real button: Tab to it, Enter to turn). Click or tap near the corner or the outer edge to turn. A corner appears only if that chapter exists. Dragging still moves the camera; only a short click turns the page. Corners, tags, arrow keys and the notebook buttons all run the same page-turn animation.
 - **Left page view** (notebook header or Camera > Left page): the camera looks straight down at the real 3D left page (narrow field of view, no perspective distortion, text upright, high-resolution texture). The notebook is hidden by default; use **Show notebook** / **Hide notebook** in the top bar, drag to pan, scroll to zoom, double-click to reset. **Back to previous view** (or Esc) restores the camera and the notebook.
 - **Camera bar** (top of the 3D view): the chapter's camera views and, in the ESP32 chapters, **Play / Pause** (Pause freezes the simulated clock; Play continues, or starts a stopped program). It slides away while you scroll (mouse wheel or the notebook) and comes back on the next pointer move, tap or key press. In the left page view it gives way to the left page toolbar, which has **−** / **+** zoom buttons; everything outside the left page is covered.
-- **Book size:** the shared "Whole book" view (and any chapter view marked `fit: 'book'`, such as the ESP32 "Whole project") computes the camera distance so the open book and the parts built on it fill the free area: the window minus the notebook, the camera bar and a small margin. It is recomputed when the window is resized.
-- **Floating labels** (the dark tags; the text printed on the 3D boards is part of the models): **Labels: auto** (under the Library button) shows as many as fit without overlapping each other, the notebook, the camera bar or the anchor points of other parts; the rest shrink to their dot. **Labels: on click** shows only dots; **Labels: off** hides them. In every mode, hovering a part with the mouse or clicking it shows its label; a second click (or a click elsewhere) hides it. This works for every chapter, using each chapter's label list in its order of priority.
+- **Entry view:** every book opens directly on the open book ("Whole book" view), centred horizontally and vertically in the free area and as large as possible without cropping the pages. Choosing a book in the library opens it straight away.
+- **Book size:** the shared "Whole book" view (and any chapter view marked `fit: 'book'`, such as the ESP32 "Whole project") computes the camera distance and shifts its target so the open book and the parts built on it fill and are centred in the free area: the window minus the notebook, the camera bar and a small margin. Three layouts: side notebook (wide screens), bottom sheet (narrow portrait or square screens) and a compact side notebook (narrow landscape screens such as phones on their side). It is recomputed on resize and orientation change.
+- **Floating labels** (the dark tags; the text printed on the 3D boards is part of the models) are **off by default**. **Show labels / Hide labels** (under the Library button) toggles them; when shown, as many as fit without overlapping each other, the notebook, the camera bar or the anchor points of other parts are drawn, and the rest shrink to their dot. With labels hidden, a click or tap on a part shows that part's label only; a click on another part moves it there, and a click on empty space hides it. With a mouse, hovering a part also shows it. This works for every chapter, using each chapter's label list in its order of priority.
+- **Expand notebook** (notebook header): the notebook fills almost the whole screen with larger text, full-width tables, diagrams and code, and vertical scrolling. **Return to book** (or Esc) goes back. The chapter, page, tab and the running simulation are kept (it is not rebuilt).
+- **Download experiment guide** (notebook header): builds a printable guide of the current chapter from its own content (the left page, the Code and How it works tabs, the guided experiments and every reference link) plus a snapshot of the 3D book. Sections: objective, materials, wiring diagram, steps, source code, how it works, expected results, exercises, troubleshooting, warnings and references, when the chapter has them. It opens the browser's print dialog: choose **Save as PDF**. Nothing is sent anywhere. Code: `src/guide.js`.
 - **Read page** (notebook header): shows the left page as selectable HTML at full size, with the simulation stopped. **Back to the book** (or Esc) returns to the same chapter and camera. The text and schematics come from `src/pageContent.js`, the same source that paints the 3D page.
 - Turning a page (or reading) stops the current chapter's program and electrical animations, folds the 3D circuit away, turns the page leaf, then builds the new chapter's circuit and swaps the notebook (simulation, code, explanations).
 - On narrow screens the notebook is a bottom sheet that scrolls as a whole (the tabs stay pinned).
@@ -155,8 +158,32 @@ Create `src/books/<id>/index.js` with `{ id, name, board, title, blurb, eyebrow,
 - `src/circuit2.js`: lesson 2 scene (push-button cutaway, logic/current flows)
 - `src/pageContent.js`: written content and SVG schematics of each left page (feeds the 3D texture and Read page)
 - `src/simulation.js`, `src/ui.js`, `src/textures.js` (large canvases are built once and shared between lessons)
+- `src/guide.js`: the printable experiment guide (shared by every book), tested by `tests/guide.test.mjs`
+- `src/books/coral/`: Coral Dev Board Micro book (`boardModel.js` loads `model/dev_board_micro.bin` + `.json`, converted from the official STEP; `presence.js` detector logic; `presenceScene.js`; `chapter1.js`; `pageContent.js`; `cover.js`), tested by `tests/coralPresence.test.mjs`
 - `python/led_blink.py`, `python/led_button.py`, `python/led_pwm.py`, `python/traffic_light.py`
 - `server.mjs`: dependency-free static server
+
+## Integrating this branch
+
+Branch `backup/engine-ux-wip` contains everything on `main` plus the ESP32 chapters 2 and 3, the Coral Dev Board Micro book and the engine UX changes (labels, entry view and auto framing, Expand notebook, experiment guide). It was not merged into `main`.
+
+1. `git fetch origin && git checkout backup/engine-ux-wip`
+2. Requirements: Node.js 18+ and Chrome. There is no `npm install` and no build step. three.js is vendored in `vendor/`. The Coral model is committed as `.bin` + `.json` (`.gitattributes` marks it binary).
+3. `npm test` should give 96 tests: 95 pass and 1 is skipped when Python 3 is not installed (the `traffic_light.py` comparison).
+4. `npm start`, then open <http://127.0.0.1:5173/>. Useful URLs: `?book=raspberry-pi&open=1&lesson=1`, `?book=esp32&open=1&lesson=2`, `?book=coral&open=1&lesson=1`.
+5. To merge: open a pull request from `backup/engine-ux-wip` into `main` and run the manual checks below on real devices first.
+
+Test hooks for automated browsers are on `window.book3d`: `layout()`, `viewName`, `labelsShown`, `selectedLabel`, `setExpanded(bool)`, `expanded`, `guide()` (returns `{ html, fileName }`), `project(x, y, z)`, `debugPointer`.
+
+### Pending tests and known issues
+
+What was verified: `npm test`, plus a headless Chrome run on desktop (1400×900, resized to 1000×700) using software WebGL. For Raspberry Pi 5 ch. 1 and ESP32 ch. 2 every check passed: entry view centred and fitted, labels off by default, Show/Hide labels, labels not overlapping, a tap on a part shows only that part's label, Expand notebook and Return to book keep the chapter, the tab and the running simulation, the guide sections, and the reframe after resize. For Coral ch. 1 every check passed except the next item.
+
+- **Coral, tap on a part to show its label (desktop, automated run):** the taps on "Person" and "Camera image" showed no label. The figure and the camera panel are interactive 3D parts, so their tap goes through `pressAt` → `endPointer` → `clickLabelAt`. The likely cause is the test: with software WebGL a Coral frame takes over a second, and the release arrived more than 800 ms after the press, so it counted as a long press. The test now sends explicit event times but was not re-run. Check by hand: tap the person in the Coral chapter with labels hidden. Its label should appear.
+- **Not run yet:** tablet portrait 768×1024, tablet landscape 1024×768, phone portrait 390×844 and phone landscape 844×390 for the three books (the compact side notebook layout of landscape phones is new), on real phones and tablets, in Firefox and Safari.
+- **Guide PDF:** the browser's print dialog writes the file, so the reader must choose "Save as PDF". The fix that moves a code listing found under a non-code heading into "Source code" (ESP32 ch. 2) and the new crop of the 3D snapshot were not checked in a regenerated PDF.
+- **Header buttons:** the desktop header spacing (`margin-right: -70px` on the header actions) was not checked visually on every width.
+- **README, Publishing:** the section below describes the private source project. `tools/publish-public.ps1` and `docs/` are not part of this repository.
 
 ## Publishing (GitHub Pages)
 
@@ -173,6 +200,7 @@ To update the public copy after changing the project:
 ## Credits and licenses
 
 - **three.js r170** (`vendor/three.module.js`) is © 2010-2024 three.js authors, MIT License. See `vendor/LICENSE-three.txt`; the license header is kept inside the file.
+- **Coral Dev Board Micro 3D model** (`src/books/coral/model/`) is converted from the official STEP file of `google-coral/mechanicals`, Apache License 2.0. See `src/books/coral/model/LICENSE-coral-mechanicals.txt`.
 - No other third-party code, fonts, images or textures are included: textures are drawn at runtime and the page uses system fonts.
 - This is an independent educational project. It is not affiliated with or endorsed by Raspberry Pi Ltd. "Raspberry Pi" is a trademark of Raspberry Pi Ltd; the board and logo are simplified illustrations.
 - The book's own code and text have no license chosen yet, so by default all rights are reserved by the author.

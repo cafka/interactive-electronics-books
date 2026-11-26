@@ -4,6 +4,7 @@ import { BOOKS, DEFAULT_BOOK, getBook } from './books/index.js';
 import { createShell } from './ui.js';
 import { buildReader } from './pageContent.js';
 import { measureLeftPage } from './textures.js';
+import { buildGuideHtml, guideFileName, printGuide } from './guide.js';
 
 const $ = (s) => document.querySelector(s);
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -87,7 +88,9 @@ desk.receiveShadow = true;
 scene.add(desk);
 
 /* ------------------------------------------------------------------ books and lessons */
-const options = { slow: true, labels: true }; // shared by every lesson's notebook
+// shared by every lesson's notebook. Labels start hidden: the reader sees the project first, and clicks a part
+// (or "Show labels") to read names.
+const options = { slow: true, labels: false };
 const env = { options, userView };
 const labelsRoot = $('#labels');
 const bookStates = new Map(); // book id -> { def, runtimes, labelSets, texCache, pops } (each book is built on first use)
@@ -170,8 +173,16 @@ const GLOBAL_VIEWS = {
 };
 const size = { w: 1, h: 1 };
 let panelAmt = 0; // 0 notebook hidden .. 1 notebook fully shown (set every frame)
-const isNarrow = () => size.w <= 900;
-const panelW = () => 436;
+/*
+ * Layouts (the same rules are in styles.css):
+ *   wide (> 900 px): the notebook is a column on the right (420 px + 16 px margin);
+ *   narrow and portrait or square (<= 900 px, width / height <= 4/3): the notebook is a sheet at the bottom;
+ *   narrow and landscape (phones turned sideways): a slimmer column on the right, because a bottom sheet would
+ *   leave the book a strip of 200 px.
+ */
+const isNarrow = () => size.w <= 900 && size.w / size.h <= 4 / 3; // bottom sheet layout
+const isCompactSide = () => size.w <= 900 && !isNarrow();
+const panelW = () => (isCompactSide() ? Math.min(360, size.w * 0.44) + 8 : 436);
 const sheetH = () => size.h * 0.52;
 let currentViewName = 'closed';
 
@@ -215,47 +226,87 @@ function measureContent(root) {
   }
   return pts;
 }
-function fitDistance(v) {
+/** The free area for the book (screen px): the window minus the notebook, the top controls and a margin. */
+function freeArea() {
+  if (isNarrow()) return { l: 8, r: size.w - 8, t: 100, b: size.h - sheetH() - 8 };
+  if (isCompactSide()) return { l: 8, r: size.w - panelW() - 8, t: 50, b: size.h - 8 };
+  return { l: 16, r: size.w - panelW() - 16, t: 72, b: size.h - 24 };
+}
+/**
+ * Camera target and distance at which the open book and everything built on it are as large as possible inside the
+ * free area, and centred in it, horizontally and vertically: a binary search on the distance, then the target is
+ * moved in the camera's plane until the projected content is centred, and the distance is searched again.
+ */
+function fitView(v) {
   const pts = boxCorners(new THREE.Box3(new THREE.Vector3(-11.25, -1.1, -7.25), new THREE.Vector3(11.25, 0.05, 7.25)));
   const cp = runtimes[current] && contentBoxes.get(runtimes[current]);
   if (cp) pts.push(...cp);
   else pts.push(new THREE.Vector3(10, 3.5, -6), new THREE.Vector3(2, 3.5, -6)); // until measured: room for tall parts
   const narrow = isNarrow();
   const ox = narrow ? 0 : panelW() / 2, oy = narrow ? sheetH() / 2 : 0; // the same view offset the frame loop applies
-  const area = narrow ? { l: 8, r: size.w - 8, t: 100, b: size.h - sheetH() - 8 } : { l: 16, r: size.w - panelW() - 16, t: 72, b: size.h - 24 };
+  const area = freeArea();
   fitCam.fov = DEFAULT_FOV;
   fitCam.aspect = size.w / size.h;
   fitCam.near = 0.1;
   fitCam.far = 600;
   fitCam.updateProjectionMatrix();
   const t = new THREE.Vector3(...v.t);
-  const fits = (r) => {
+  const bounds = (r) => {
     fitCam.position.set(t.x + r * Math.sin(v.phi) * Math.sin(v.theta), t.y + r * Math.cos(v.phi), t.z + r * Math.sin(v.phi) * Math.cos(v.theta));
     fitCam.lookAt(t);
     fitCam.updateMatrixWorld();
+    const b = { l: Infinity, r: -Infinity, t: Infinity, b: -Infinity };
     for (const p of pts) {
       fitTmp.copy(p).project(fitCam);
-      if (fitTmp.z >= 1) return false;
+      if (fitTmp.z >= 1) return null;
       const sx = (fitTmp.x * 0.5 + 0.5) * size.w - ox, sy = (-fitTmp.y * 0.5 + 0.5) * size.h - oy;
-      if (sx < area.l || sx > area.r || sy < area.t || sy > area.b) return false;
+      b.l = Math.min(b.l, sx);
+      b.r = Math.max(b.r, sx);
+      b.t = Math.min(b.t, sy);
+      b.b = Math.max(b.b, sy);
     }
-    return true;
+    return b;
   };
-  let lo = 4, hi = 220;
-  if (!fits(hi)) return hi;
-  for (let k = 0; k < 30; k++) {
-    const mid = (lo + hi) / 2;
-    if (fits(mid)) hi = mid;
-    else lo = mid;
+  // fits if the content would fit the area once centred (its size, not its position, decides)
+  const fits = (r) => {
+    const b = bounds(r);
+    return !!b && b.r - b.l <= area.r - area.l && b.b - b.t <= area.b - area.t;
+  };
+  const search = () => {
+    let lo = 4, hi = 220;
+    if (!fits(hi)) return hi;
+    for (let k = 0; k < 30; k++) {
+      const mid = (lo + hi) / 2;
+      if (fits(mid)) hi = mid;
+      else lo = mid;
+    }
+    return hi;
+  };
+  const right = new THREE.Vector3(), up = new THREE.Vector3();
+  let r = search();
+  for (let k = 0; k < 6; k++) {
+    const b = bounds(r);
+    if (!b) break;
+    const dx = (b.l + b.r) / 2 - (area.l + area.r) / 2, dy = (b.t + b.b) / 2 - (area.t + area.b) / 2;
+    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) break;
+    const wpp = (2 * r * Math.tan(THREE.MathUtils.degToRad(fitCam.fov / 2))) / size.h; // world units per pixel at the target
+    right.setFromMatrixColumn(fitCam.matrixWorld, 0);
+    up.setFromMatrixColumn(fitCam.matrixWorld, 1);
+    t.addScaledVector(right, dx * wpp).addScaledVector(up, -dy * wpp);
+    r = search();
   }
-  return hi;
+  return { r, t };
 }
 function setView(name, instant = false) {
   const v = viewDef(name);
   currentViewName = name;
   const fit = fitFor(name);
   rig.goalTarget.set(...v.t);
-  rig.goalR = v.fit === 'book' ? fitDistance(v) : v.r * fit;
+  if (v.fit === 'book') {
+    const f = fitView(v);
+    rig.goalTarget.copy(f.t);
+    rig.goalR = f.r;
+  } else rig.goalR = v.r * fit;
   rig.goalPhi = v.phi;
   rig.goalTheta = v.theta;
   rig.goalFov = DEFAULT_FOV;
@@ -291,10 +342,13 @@ function updateRig(dt) {
 
 let userTouched = false;
 let autoGlide = 0;
+/** The view every chapter opens with: the whole open book, centred and as large as the screen allows. */
+const ENTRY_VIEW = 'book';
 function userView(name) {
   if (name === 'leftpage') return enterLeftPage();
   if (leftView) exitLeftPage();
-  userTouched = true;
+  // a named view is not a manual camera move: it is framed again when the window changes size
+  userTouched = false;
   clearTimeout(autoGlide);
   setView(name);
 }
@@ -304,6 +358,7 @@ let bookP = 0;
 let bookTarget = 0;
 let turn = null; // { from, to, phase: 'retract' | 'flip', t, swapped }
 let reading = false; // "Read page" mode: HTML view of the left page, simulation stopped
+let expanded = false; // "Expand notebook": the notebook fills the screen; the chapter and its simulation keep going
 let readFactor = 0; // 0 normal .. 1 reading (smoothed, drives the notebook slide and render pause)
 let leftView = null; // "Left page" camera view (see below)
 let leftFactor = 0; // 0 normal .. 1 left page view (smoothed)
@@ -334,12 +389,12 @@ function openBook() {
   bookTarget = 1;
   $('#intro').classList.add('gone');
   mountCurrent();
-  setView('book');
+  setView(ENTRY_VIEW);
   userTouched = false;
-  autoGlide = setTimeout(() => !userTouched && setView(LESSONS[current].defaultView), 3600);
 }
 function closeBook() {
   if (turn) return;
+  if (expanded) setExpanded(false);
   if (leftView) exitLeftPage();
   releaseInput();
   runtimes[current].stop();
@@ -358,7 +413,7 @@ let libraryOpen = false;
 let choosing = false;
 
 function syncChrome() {
-  libraryBtn.hidden = libraryOpen || !!leftView;
+  libraryBtn.hidden = libraryOpen || !!leftView || expanded;
   document.body.classList.toggle('in-library', libraryOpen);
 }
 for (const def of BOOKS) {
@@ -382,6 +437,7 @@ for (const def of BOOKS) {
 /** Back to the library: the chapter stops, the book closes and the choice is shown again. */
 function showLibrary() {
   if (turn || libraryOpen) return;
+  if (expanded) setExpanded(false);
   if (leftView) exitLeftPage();
   if (reading) exitReading();
   releaseInput();
@@ -415,9 +471,11 @@ async function chooseBook(id) {
     libraryOpen = false;
     libraryEl.hidden = true;
     libStatus.textContent = '';
-    setView('closed');
     syncChrome();
-    $('#openBtn').focus({ preventScroll: true });
+    // straight to the open book: the reader does not have to open it or move the camera to start reading
+    bookTarget = 0;
+    openBook();
+    $('#readBtn').focus({ preventScroll: true });
   } catch (err) {
     console.error(err);
     libStatus.textContent = `Could not load ${def.name}. ${err.message || ''}`;
@@ -429,7 +487,7 @@ libraryBtn.addEventListener('click', showLibrary);
 
 /** Turn to lesson i. Next / Previous buttons, the arrow keys, the page corners and the corner tags all end up here. */
 function goTo(i) {
-  if (turn || reading || !bookIsOpen() || i < 0 || i >= N || i === current) return;
+  if (turn || reading || expanded || !bookIsOpen() || i < 0 || i >= N || i === current) return;
   if (leftView) exitLeftPage();
   hoverZone = focusZone = null;
   releaseInput();
@@ -442,6 +500,10 @@ function goTo(i) {
 window.addEventListener('keydown', (e) => {
   if (reading) {
     if (e.key === 'Escape') exitReading();
+    return;
+  }
+  if (expanded) {
+    if (e.key === 'Escape') setExpanded(false);
     return;
   }
   if (e.key === 'Escape' && leftView) {
@@ -460,6 +522,7 @@ let savedView = null;
 
 function enterReading() {
   if (reading || turn || !bookIsOpen()) return;
+  if (expanded) setExpanded(false);
   if (leftView) exitLeftPage();
   hoverZone = focusZone = null;
   releaseInput();
@@ -498,6 +561,83 @@ function exitReading() {
 $('#readBtn').addEventListener('click', enterReading);
 $('#readerBack').addEventListener('click', exitReading);
 
+/* ------------------------------------------------------------------ "Expand notebook" mode */
+// The notebook takes almost the whole screen, with larger text and the full width. Nothing is stopped or remounted:
+// the same chapter, page, tab, scroll position and simulation are there when the reader returns to the book.
+const expandBtn = $('#expandBtn');
+function setExpanded(on) {
+  if (expanded === on || (on && (turn || reading || !bookIsOpen()))) return;
+  if (on && leftView) exitLeftPage();
+  hoverZone = focusZone = null;
+  hoverLabel = null;
+  selectedLabel = null;
+  releaseInput();
+  expanded = on;
+  document.body.classList.toggle('nb-expanded', on);
+  expandBtn.setAttribute('aria-pressed', String(on));
+  expandBtn.querySelector('span').textContent = on ? 'Return to book' : 'Expand notebook';
+  expandBtn.title = on ? 'Back to the 3D book. The chapter and its simulation are as you left them.' : 'Show the notebook on the whole screen, with larger text. The chapter and its simulation keep their state.';
+  syncChrome();
+  expandBtn.focus({ preventScroll: true });
+}
+expandBtn.addEventListener('click', () => setExpanded(!expanded));
+
+/* ------------------------------------------------------------------ "Download experiment guide" */
+/** A picture of the 3D book in its current view, cropped to the area the book uses (no notebook). */
+function bookSnapshot() {
+  try {
+    renderer.render(scene, camera);
+    // crop to the book and its project (plus a margin), inside the area the book uses
+    const a = freeArea(), cb = contentScreenBox(), m = 18;
+    const x0 = clamp(cb.l - m, a.l, a.r), x1 = clamp(cb.r + m, a.l, a.r), y0 = clamp(cb.t - m, a.t, a.b), y1 = clamp(cb.b + m, a.t, a.b);
+    const box = x1 - x0 > 80 && y1 - y0 > 60 ? { l: x0, t: y0, w: x1 - x0, h: y1 - y0 } : { l: a.l, t: a.t, w: a.r - a.l, h: a.b - a.t };
+    const k = renderer.domElement.width / size.w;
+    const c = document.createElement('canvas');
+    c.width = Math.min(Math.round(box.w * k), 1600);
+    c.height = Math.round((c.width * box.h) / box.w);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#1b2547'; // the canvas is transparent over the page background: paint that background
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(renderer.domElement, box.l * k, box.t * k, box.w * k, box.h * k, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.88);
+  } catch {
+    return null;
+  }
+}
+/** On-screen box of what the whole-book view frames: the pages and every part built on them. */
+function contentScreenBox() {
+  const pts = boxCorners(new THREE.Box3(new THREE.Vector3(-11.25, -1.1, -7.25), new THREE.Vector3(11.25, 0.05, 7.25)));
+  const cp = contentBoxes.get(runtimes[current]);
+  if (cp) pts.push(...cp);
+  const c = { l: Infinity, r: -Infinity, t: Infinity, b: -Infinity };
+  const v = new THREE.Vector3();
+  for (const p of pts) {
+    v.copy(p).project(camera);
+    if (v.z >= 1) continue;
+    const x = (v.x * 0.5 + 0.5) * size.w, y = (-v.y * 0.5 + 0.5) * size.h;
+    c.l = Math.min(c.l, x);
+    c.r = Math.max(c.r, x);
+    c.t = Math.min(c.t, y);
+    c.b = Math.max(c.b, y);
+  }
+  return c;
+}
+function currentGuide() {
+  const lesson = LESSONS[current];
+  return { html: buildGuideHtml({ book: activeDef, lesson, tabs: shell.tabs, snapshot: bookSnapshot() }), fileName: guideFileName(activeDef, lesson) };
+}
+$('#guideBtn').addEventListener('click', async () => {
+  const btn = $('#guideBtn');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    const g = currentGuide();
+    await printGuide(g.html, g.fileName);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 /* ------------------------------------------------------------------ "Left page" camera view (the 3D page, seen straight on) */
 // The camera looks straight down at the left page of the 3D book with a narrow field of view (a "dolly zoom"
 // away from the page), so the page appears flat and undistorted, text upright, top of the page at the top.
@@ -528,6 +668,7 @@ function updateLeftBar() {
 }
 function enterLeftPage() {
   if (leftView || reading || turn || !bookIsOpen()) return;
+  if (expanded) setExpanded(false);
   hoverZone = focusZone = null;
   releaseInput();
   clearTimeout(autoGlide);
@@ -602,10 +743,7 @@ function buildCamBar() {
 }
 const camLabels = $('#camLabels');
 camLabels.addEventListener('click', () => {
-  // auto -> on click -> off -> auto; choosing a visible mode also turns the notebook's "Show labels" option back on
-  const next = LABEL_MODES[(LABEL_MODES.indexOf(labelMode()) + 1) % LABEL_MODES.length];
-  options.labelMode = next === 'off' ? options.labelMode : next;
-  options.labels = next !== 'off';
+  options.labels = !options.labels;
   selectedLabel = null;
 });
 camPlay.addEventListener('click', () => {
@@ -633,14 +771,17 @@ camBar.addEventListener('focusin', () => showCamBar(true));
 
 /** Per frame: visibility, position next to the notebook, play label, highlighted view, left page mask. */
 function updateCamBar(amt) {
-  const show = bookIsOpen() && !reading && !leftView && !turn && !libraryOpen;
+  const show = bookIsOpen() && !reading && !leftView && !turn && !libraryOpen && !expanded;
   if (camBar.hidden === show) camBar.hidden = !show;
   if (camLabels.hidden === show) camLabels.hidden = !show;
   const lm = labelMode(); // kept up to date even while the bar is hidden (page turn, reading)
   if (camState.labels !== lm) {
     camState.labels = lm;
     camLabels.textContent = LABEL_MODE_TEXT[lm];
-    camLabels.setAttribute('aria-label', `${LABEL_MODE_TEXT[lm]}. Press to change.`);
+    camLabels.setAttribute('aria-pressed', String(lm === 'auto'));
+    camLabels.title = lm === 'auto' ? 'Hide the names of the parts. You can still click a part to see its name.' : 'Show the names of all the parts. You can also click a single part to see its name.';
+    // the notebook's own "Show labels" checkbox (every chapter has one) says the same thing
+    for (const box of document.querySelectorAll('#panel input#optLabels')) box.checked = options.labels;
   }
   if (show) {
     camBar.style.right = isNarrow() ? '0px' : `${(panelW() * amt).toFixed(1)}px`;
@@ -680,6 +821,7 @@ const hit = new THREE.Vector3();
 const corner = new THREE.Vector3();
 let drag = null;
 let pressPointer = null;
+let pressAt = null; // where and when a press on an interactive 3D part started
 let hoverZone = null; // 'next' | 'prev' | null: page-turn zone under the mouse
 let focusZone = null; // same, for keyboard focus on a corner tag
 const pressSource = () => `mouse:${pressPointer}`;
@@ -703,12 +845,21 @@ function cornerPx(x) {
   corner.set(x, 0, 7).project(camera);
   return [(corner.x * 0.5 + 0.5) * size.w, (-corner.y * 0.5 + 0.5) * size.h];
 }
-const canTurnNow = () => !turn && !reading && !leftView && bookIsOpen();
+const canTurnNow = () => !turn && !reading && !leftView && !expanded && bookIsOpen();
 
 /**
  * Page-turn zones: a generous disc around each bottom corner (screen space, so it is easy to hit) plus the outer
  * edge of the page. A direction exists only if there is a next / previous lesson. 3D controls are tested first.
  */
+/** True if a pointer is on the disc around a bottom page corner that can turn the page. */
+function nearPageCorner(e) {
+  const radius = e.pointerType === 'mouse' ? 92 : 112;
+  const near = (x) => {
+    const [cx, cy] = cornerPx(x);
+    return Math.hypot(e.clientX - cx, e.clientY - cy) < radius;
+  };
+  return (current < N - 1 && near(11)) || (current > 0 && near(-11));
+}
 function pageZoneAt(e) {
   if (!canTurnNow()) return null;
   const canNext = current < N - 1, canPrev = current > 0;
@@ -732,12 +883,15 @@ canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
   if (pressPointer === null && pickAt(e)) {
     pressPointer = e.pointerId;
+    pressAt = { x: e.clientX, y: e.clientY, t: e.timeStamp };
     runtimes[current].pressStart(pressSource());
     canvas.classList.add('pressing');
     return;
   }
   // a press on a page edge becomes a page turn only if it ends as a short click; dragging still moves the camera
-  drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0, zone: pageZoneAt(e), t0: performance.now() };
+  // times come from the events themselves: on a slow device a long frame between press and release must not turn a
+  // quick click into a long press
+  drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0, zone: pageZoneAt(e), t0: e.timeStamp };
   canvas.classList.add('dragging');
 });
 canvas.addEventListener('pointermove', (e) => {
@@ -752,8 +906,9 @@ canvas.addEventListener('pointermove', (e) => {
   if (!drag || drag.id !== e.pointerId) {
     if (e.pointerType === 'mouse' && !drag) {
       const picked = pickAt(e);
-      hoverZone = picked ? null : pageZoneAt(e);
-      hoverLabel = hoverZone ? null : nearestLabel(e.clientX, e.clientY, 22);
+      const part = nearestLabel(e.clientX, e.clientY, 22);
+      hoverZone = picked || (part && !nearPageCorner(e)) ? null : pageZoneAt(e);
+      hoverLabel = hoverZone ? null : part;
       canvas.classList.toggle('pick', picked);
       canvas.classList.toggle('turn', !!hoverZone);
       canvas.classList.toggle('info', !picked && !hoverZone && !!hoverLabel);
@@ -784,28 +939,35 @@ canvas.addEventListener('pointermove', (e) => {
   rig.goalPhi = clamp(rig.goalPhi - dy * 0.006, 0.12, 1.45);
 });
 const endPointer = (e) => {
+  if (e.type !== 'lostpointercapture') lastRelease = { type: e.type, press: e.pointerId === pressPointer, drag: !!drag && drag.id === e.pointerId, dt: Math.round(e.timeStamp - (pressAt?.t ?? drag?.t0 ?? e.timeStamp)), moved: drag ? drag.moved : pressAt ? Math.round(Math.hypot(e.clientX - pressAt.x, e.clientY - pressAt.y)) : null };
   if (e.pointerId === pressPointer) {
     // released anywhere (inside or outside the button), cancelled, or capture lost: the button comes up
     runtimes[current].pressEnd(pressSource());
     pressPointer = null;
     canvas.classList.remove('pressing');
+    // a short click on an interactive part (not a drag of it) also shows that part's label, like any other part
+    if (e.type === 'pointerup' && pressAt && Math.hypot(e.clientX - pressAt.x, e.clientY - pressAt.y) < 8 && e.timeStamp - pressAt.t < 800) {
+      clickLabelAt(e.clientX, e.clientY, e.pointerType);
+    }
+    pressAt = null;
     return;
   }
   if (drag && drag.id === e.pointerId) {
-    const click = e.type === 'pointerup' && drag.moved < 6 && performance.now() - drag.t0 < 800;
+    const click = e.type === 'pointerup' && drag.moved < 6 && e.timeStamp - drag.t0 < 800;
     const zone = drag.zone;
     if (drag.moved < 5 && bookTarget === 0) openBook();
     drag = null;
     canvas.classList.remove('dragging');
-    if (click && zone) {
+    // a part on the edge of the page wins over the page-turn strip (its label is what the reader asked for);
+    // the curled corners always turn the page
+    const partHere = click && zone && !nearPageCorner(e) && nearestLabel(e.clientX, e.clientY, e.pointerType === 'mouse' ? 30 : 44);
+    if (click && zone && !partHere) {
       hoverZone = null;
       canvas.classList.remove('turn');
       goTo(zone === 'next' ? current + 1 : current - 1);
     } else if (click && bookIsOpen()) {
       // a click on a part shows its label (a second click, or a click elsewhere, hides it again)
-      const l = nearestLabel(e.clientX, e.clientY, e.pointerType === 'mouse' ? 30 : 44);
-      lastLabelClick = { x: e.clientX, y: e.clientY, found: l?.title ?? null, before: selectedLabel?.title ?? null, same: l === selectedLabel };
-      selectedLabel = l && l !== selectedLabel ? l : null;
+      clickLabelAt(e.clientX, e.clientY, e.pointerType);
     }
   }
 };
@@ -831,7 +993,10 @@ canvas.addEventListener('dblclick', () => {
   if (leftView) {
     Object.assign(leftView, { panX: 0, panZ: 0, zoom: 1 });
     applyLeftFraming();
-  } else if (bookTarget) setView(LESSONS[current].defaultView);
+  } else if (bookTarget) {
+    userTouched = false;
+    setView(ENTRY_VIEW);
+  }
 });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
@@ -877,20 +1042,27 @@ function updateTags(panelPx, sheetPx) {
 /* ------------------------------------------------------------------ labels (one set per lesson, built with the book) */
 /*
  * Floating labels (the DOM tags; the printed text on the 3D models is part of their textures and is not touched).
- * Modes, shared by every chapter: 'auto' shows as many labels as fit without overlapping each other, the notebook,
- * the camera bar or the anchor points of other parts; the rest shrink to their dot. 'select' shows only dots.
- * 'off' hides them. In every mode a click (or a hover with the mouse) on a part shows its label.
+ * Shared by every chapter:
+ *   - hidden (the default, "Show labels"): no tag and no dot. A click or tap on a part shows that part's label only;
+ *     a click on another part moves it there, a click on empty space hides it. With a mouse, hovering also shows it.
+ *   - shown ("Hide labels"): as many labels as fit without overlapping each other, the notebook, the camera bar or
+ *     the anchor points of other parts; the rest shrink to their dot.
  * Priority: the order of the chapter's label list; labels marked hideNarrow come last.
  */
 const proj = new THREE.Vector3();
-const LABEL_MODES = ['auto', 'select', 'off'];
-const LABEL_MODE_TEXT = { auto: 'Labels: auto', select: 'Labels: on click', off: 'Labels: off' };
-options.labelMode = 'auto';
+const LABEL_MODE_TEXT = { auto: 'Hide labels', off: 'Show labels' };
 let selectedLabel = null;
 let hoverLabel = null;
 let lastLabelClick = null;
-const labelMode = () => (options.labels ? options.labelMode : 'off');
-const labelsLive = (i) => i === current && !turn && !leftView && bookP > 0.99 && pops[i] >= runtimes[i].popDuration - 0.05;
+let lastRelease = null;
+const labelMode = () => (options.labels ? 'auto' : 'off');
+const labelsLive = (i) => i === current && !turn && !leftView && !expanded && bookP > 0.99 && pops[i] >= runtimes[i].popDuration - 0.05;
+/** A click or tap at a screen point: show the label of the part there, or hide the current one. */
+function clickLabelAt(x, y, pointerType) {
+  const l = nearestLabel(x, y, pointerType === 'mouse' ? 30 : 44);
+  lastLabelClick = { x, y, found: l?.title ?? null, before: selectedLabel?.title ?? null, same: l === selectedLabel };
+  selectedLabel = l && l !== selectedLabel ? l : null;
+}
 const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 /** The label whose anchor is nearest to a screen point (within maxPx), or null. */
 function nearestLabel(x, y, maxPx) {
@@ -1011,7 +1183,7 @@ resize();
 
 /* ------------------------------------------------------------------ debug / test shortcuts (see README) */
 const opened = params.has('open');
-setView(opened ? params.get('view') || LESSONS[current].defaultView : 'closed', opened);
+setView(opened ? params.get('view') || ENTRY_VIEW : 'closed', opened);
 if (!opened) {
   rig.r = 55; // fly-in on first load
   rig.theta = 1.0;
@@ -1020,7 +1192,7 @@ if (!opened) {
   bookP = 1;
   pops[current] = runtimes[current].popDuration + 0.4;
   $('#intro').classList.add('gone');
-  userTouched = true;
+  userTouched = false;
   mountCurrent();
   if (params.get('led') === 'on') runtimes[current].debugOn();
   if (params.get('press') === '1') runtimes[current].pressStart('debug');
@@ -1031,9 +1203,12 @@ shell.setBusy(false, current, N);
 libraryOpen = !opened && !params.has('book');
 libraryEl.hidden = !libraryOpen;
 syncChrome();
+// a link to a book (?book=...) goes straight to its open book, like choosing it in the library
+if (!opened && params.has('book')) openBook();
 
 /* ------------------------------------------------------------------ main loop */
 const FLIP_SECONDS = 1.6;
+let lastCoveredRender = -1e9;
 let last = performance.now();
 let time = 0;
 function frame() {
@@ -1070,7 +1245,7 @@ function frame() {
         turn = null;
         shell.setBusy(false, current, N);
         userTouched = false;
-        setView(LESSONS[current].defaultView);
+        setView(ENTRY_VIEW);
       }
     }
   }
@@ -1096,8 +1271,8 @@ function frame() {
   const amt = smoothstep(0.4, 0.95, bookP) * (1 - readFactor) * (1 - leftHide);
   panelAmt = amt;
   const panel = $('#panel');
-  panel.style.transform = `translate${isNarrow() ? 'Y' : 'X'}(calc(${(1 - amt).toFixed(4)} * (100% + 40px)))`;
-  panel.style.visibility = amt <= 0.001 ? 'hidden' : 'visible';
+  panel.style.transform = expanded ? 'none' : `translate${isNarrow() ? 'Y' : 'X'}(calc(${(1 - amt).toFixed(4)} * (100% + 40px)))`;
+  panel.style.visibility = amt <= 0.001 && !expanded ? 'hidden' : 'visible';
   const ox = isNarrow() ? 0 : (panelW() * amt) / 2;
   // narrow screens: the notebook is a bottom sheet; in the front view the toolbar also takes 64 px at the top
   const oy = (isNarrow() ? (sheetH() * amt) / 2 : 0) - 32 * leftFactor;
@@ -1114,7 +1289,14 @@ function frame() {
   const lift = (zone) => (hoverZone === zone || focusZone === zone ? 1 : 0.6);
   book.setEars(canTurn && current < N - 1 ? lift('next') : 0, canTurn && current > 0 ? lift('prev') : 0);
   book.updateEars(dt, time);
-  updateTags(isNarrow() ? 0 : panelW() * amt, isNarrow() ? sheetH() * amt : 0);  if (!(reading && readFactor > 0.98)) renderer.render(scene, camera); // the reader covers the scene, so skip drawing it
+  updateTags(isNarrow() ? 0 : panelW() * amt, isNarrow() ? sheetH() * amt : 0);
+  // the reader covers the scene, so skip drawing it; behind the expanded notebook draw it a few times a second only
+  // (a chapter may show a picture made while rendering, such as the Coral camera image)
+  const covered = (reading && readFactor > 0.98) || (expanded && now - lastCoveredRender < 400);
+  if (!covered) {
+    if (expanded) lastCoveredRender = now;
+    renderer.render(scene, camera);
+  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -1129,9 +1311,17 @@ window.book3d = {
   get turning() { return !!turn; },
   get leftView() { return !!leftView; },
   /** Test helper: pointer and label selection state. */
-  get debugPointer() { return { pressPointer, drag: !!drag, selected: selectedLabel?.title ?? null, hover: hoverLabel?.title ?? null, lastLabelClick }; },
+  get debugPointer() { return { pressPointer, drag: !!drag, selected: selectedLabel?.title ?? null, hover: hoverLabel?.title ?? null, lastLabelClick, lastRelease }; },
   rig,
   enterLeftPage, exitLeftPage, measureLeftPage: (i) => measureLeftPage(LESSONS[i].pageContent),
+  setExpanded, get expanded() { return expanded; },
+  /** Test helper: the experiment guide of the current chapter as HTML, and the file name the PDF gets. */
+  guide: () => currentGuide(),
+  get labelsShown() { return options.labels; },
+  get selectedLabel() { return selectedLabel?.title ?? null; },
+  get viewName() { return currentViewName; },
+  /** Test helper: the free area for the book and the layout in use. */
+  layout: () => ({ area: freeArea(), content: contentScreenBox(), measured: contentBoxes.has(runtimes[current]), sheet: isNarrow(), compactSide: isCompactSide(), panelW: panelW() }),
   /** Test helper: jump the camera straight to its goals (software rendering is slow, real GPUs glide). */
   snapRig() { rig.target.copy(rig.goalTarget); rig.r = rig.goalR; rig.theta = rig.goalTheta; rig.phi = rig.goalPhi; rig.fov = rig.goalFov; },
   project(x, y, z) {

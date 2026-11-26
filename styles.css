@@ -56,7 +56,9 @@ body {
 .labels-btn[hidden] { display: none; }
 .labels-btn:hover { background: rgba(40,52,90,0.95); }
 .labels-btn:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
-@media (max-width: 900px) { .labels-btn { top: 8px; left: auto; right: 8px; } }
+@media (max-width: 900px) and (max-aspect-ratio: 4/3) { .labels-btn { top: 8px; left: auto; right: 8px; } }
+@media (max-width: 900px) and (min-aspect-ratio: 4001/3000) { .labels-btn { top: 8px; left: 104px; } }
+.labels-btn[aria-pressed=true] { color: #1b1405; background: linear-gradient(180deg, #f2d98e, #d8b25a); border-color: transparent; }
 .label .val { color: #ffcf6b; font-weight: 700; }
 
 /* ---------- intro ---------- */
@@ -215,10 +217,14 @@ kbd { border: 1px solid rgba(43,39,64,0.25); border-bottom-width: 2px; }
 .wiring th, .wiring td { text-align: left; padding: 6px 8px; border-bottom: 1px solid rgba(43,39,64,0.15); }
 .wiring th { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
 
-/* ---------- narrow screens: notebook becomes a bottom sheet ---------- */
-@media (max-width: 900px) {
+/* ---------- narrow screens: in portrait the notebook becomes a bottom sheet (same rule as isNarrow() in main.js) ---------- */
+@media (max-width: 900px) and (max-aspect-ratio: 4/3) {
   #panel { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; height: 48vh; transform: translateY(calc(100% + 40px)); }
-  #panel h1 { font-size: 26px; }
+}
+@media (max-width: 900px) { #panel h1 { font-size: 26px; } }
+/* narrow and landscape (a phone turned sideways): a slimmer column on the right, so the book keeps the full height */
+@media (max-width: 900px) and (min-aspect-ratio: 4001/3000) {
+  #panel { top: 8px; right: 8px; bottom: 8px; width: min(360px, 44vw); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -467,6 +473,9 @@ kbd { border: 1px solid rgba(43,39,64,0.25); border-bottom-width: 2px; }
 .left-mask[hidden] { display: none; }
 @media (prefers-reduced-motion: reduce) { .cam-bar { transition: none; } }
 
+@media (max-width: 900px) and (min-aspect-ratio: 4001/3000) {
+  .cam-bar { top: 8px !important; left: 206px !important; }
+}
 @media (max-width: 900px) {
   .cam-bar { top: 50px; left: 0; justify-content: flex-start; }
   .cam-views { flex-wrap: nowrap; overflow-x: auto; border-radius: 999px; }
@@ -777,4 +786,42 @@ body.reading .library-btn { display: none; }
 .quiz-opt.wrong { background: #fbe7e3; border-color: #c0392b; color: #8f2a22; }
 .bridge { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: rgba(181,67,42,0.08); font-size: 13.5px; }
 @media (max-width: 900px) { .pipe { grid-template-columns: repeat(2, 1fr); } }
+
+/* ================= engine: notebook header actions, expanded notebook ================= */
+/* the "Close book" link sits on the title line, so the action buttons may use the header's full width */
+@media (min-width: 901px) { .header-actions { margin-right: -70px; } }
+.header-actions .read-btn { white-space: nowrap; }
+.read-btn.nb { background: #2b2740; box-shadow: 0 3px 10px rgba(43,39,64,0.3); }
+.read-btn.nb:hover:not(:disabled) { background: #1b1830; }
+.read-btn.guide { background: #b5432a; box-shadow: 0 3px 10px rgba(181,67,42,0.3); }
+.read-btn.guide:hover:not(:disabled) { background: #96351f; }
+/* "Expand notebook": the notebook fills the screen; the 3D book stays where it was, behind it */
+body.nb-expanded #panel {
+  top: 10px !important; left: 10px !important; right: 10px !important; bottom: 10px !important;
+  width: auto !important; height: auto !important; transform: none !important; visibility: visible !important; z-index: 12;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+body.nb-expanded #panel header, body.nb-expanded #panel .tabs, body.nb-expanded .panel-foot {
+  width: 100%; max-width: 1080px; margin-left: auto; margin-right: auto;
+}
+body.nb-expanded #panel .tab-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+body.nb-expanded #panel .tab { max-width: 1080px; margin: 0 auto; font-size: 16px; line-height: 1.6; }
+body.nb-expanded #panel .tab p, body.nb-expanded #panel .tab li, body.nb-expanded #panel .tab td,
+body.nb-expanded #panel .tab th, body.nb-expanded #panel .note, body.nb-expanded #panel .explain-list li { font-size: 15.5px; }
+body.nb-expanded #panel .tab code { font-size: 14px; }
+body.nb-expanded #panel .code { font-size: 14px; }
+body.nb-expanded #panel .tab-btn { font-size: 15px; }
+body.nb-expanded #panel h1 { font-size: 34px; }
+body.nb-expanded #panel .tab canvas, body.nb-expanded #panel .tab svg, body.nb-expanded #panel .tab img { max-width: 100%; }
+body.nb-expanded #panel table { width: 100%; }
+body.nb-expanded #panel .pager, body.nb-expanded #readBtn, body.nb-expanded #leftPageBtn, body.nb-expanded #closeBookBtn { display: none; }
+body.nb-expanded #expandBtn { background: var(--teal); box-shadow: 0 3px 10px rgba(31,111,120,0.35); order: -1; }
+body.nb-expanded #labels, body.nb-expanded .corner-tag, body.nb-expanded .labels-btn, body.nb-expanded .cam-bar { display: none !important; }
+body.nb-expanded .steps { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+@media (max-width: 900px) {
+  body.nb-expanded #panel { top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; border-radius: 0; display: block; overflow-y: auto; }
+  body.nb-expanded #panel .tab-body { overflow: visible; }
+  body.nb-expanded #panel .tab { font-size: 15.5px; }
+  body.nb-expanded #panel h1 { font-size: 24px; }
+}
 @media (max-width: 420px) { .led-pair { grid-template-columns: 1fr; } .cp-view { grid-template-columns: 1fr; justify-items: center; } }
