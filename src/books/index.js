@@ -6,7 +6,8 @@
  */
 import raspberryPi from './raspberry-pi/index.js';
 import esp32 from './esp32/index.js';
+import coral from './coral/index.js';
 
-export const BOOKS = [raspberryPi, esp32];
+export const BOOKS = [raspberryPi, esp32, coral];
 export const DEFAULT_BOOK = 'raspberry-pi';
 export const getBook = (id) => BOOKS.find((b) => b.id === id);

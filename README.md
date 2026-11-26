@@ -6,12 +6,13 @@ A small library of interactive 3D books, one per board. The engine (page turn, n
 | --- | --- |
 | **Raspberry Pi 5** (Python, `gpiozero`) | 1 Light an LED · 2 Control an LED with a Button · 3 LED Brightness with PWM · 4 Traffic Light with Pedestrian Button |
 | **ESP32** (Arduino C++, ESP32-DevKitC with ESP32-WROOM-32E) | 1 Open Door Alarm (reed switch and magnet, LED, buzzer, 30 s timer) · 2 Smart Plant Watering (soil sensor, ADC, MOSFET and pump, state machine with fault lock) · 3 Smart Robotic Cat Feeder (4-DOF arm, PCA9685, load cell, kinematics, safety) |
+| **Google Coral Dev Board Micro** (C++, coralmicro) | 1 How does Coral know someone is there? (camera, person detection on the Cortex-M7, User LED) |
 
 Open the site and choose a book in the **Library**. The **Library** button (top left) goes back to it.
 
 **Live library:** <https://cafka.github.io/interactive-electronics-books/>
 
-Direct links: Raspberry Pi chapter 3 `?open=1&lesson=3` (or `?book=raspberry-pi&open=1&lesson=3`), ESP32 chapter 1 `?book=esp32&open=1&lesson=1`, ESP32 chapter 2 `?book=esp32&open=1&lesson=2`, ESP32 chapter 3 `?book=esp32&open=1&lesson=3`.
+Direct links: Raspberry Pi chapter 3 `?open=1&lesson=3` (or `?book=raspberry-pi&open=1&lesson=3`), ESP32 chapter 1 `?book=esp32&open=1&lesson=1`, ESP32 chapter 2 `?book=esp32&open=1&lesson=2`, ESP32 chapter 3 `?book=esp32&open=1&lesson=3`, Coral chapter 1 `?book=coral&open=1&lesson=1`.
 
 Stack: plain ES modules + Three.js r170 (vendored in `vendor/`, no CDN, no paid APIs, works offline).
 This is a web simulation: it never touches real GPIO.
@@ -114,6 +115,15 @@ python3 python/traffic_light.py
 - URL: `?book=esp32&open=1&lesson=3`.
 - Checks that ran without hardware: `npm test` (`tests/catFeeder.test.mjs`: constants, pins, forward and inverse kinematics with the book's worked examples, impossible targets, waypoints inside the limits, torques, a full ration with mass conservation, speed limits, faults, no resume after a restart, cat presence, manual mode). The six guided experiments passed in headless Chrome (software WebGL) with no console errors. **Not done:** the sketch has not been compiled with the ESP32 core and the libraries, nothing was run on a board or measured on real parts.
 - **Needs real parts:** servo pulse limits, zeros and directions, link masses (torque), spoon capacity, load cell calibration, the normal servo current (`JAM_MA`), the input levels of the beam, lid and E-stop. This is a teaching design, not a certified safe device: do not use it unattended with an animal before building and testing it.
+
+## Coral Dev Board Micro, chapter 1: How does Coral know someone is there?
+
+- For a reader who has done the LED lesson. Four steps in the notebook: **predict** which LED changes when someone walks into the image, **experiment** (drag the person with the mouse or a finger, or use *Step into frame* / *Step out of frame*), **understand** (tap the camera, the Cortex-M7, the Camera LED, the User LED or the Edge TPU), **check** (“the camera is on and the User LED is off: what can you say?”, then try framing and a dim room).
+- The board is Google's official CAD model (`google-coral/mechanicals`, `dev_board_micro/Dev Board Micro.step`, Apache-2.0), converted offline with OpenCascade (`occt-import-js`) into `src/books/coral/model/` (positions quantized to 1/900 mm, grouped by part; the licence travels with it). It is shown life size, USB-C down. The CAD model has no printed markings and CAD default colours; the green of the PCB, the metal shield and the LED lenses are retouched.
+- A panel in the scene shows the image the camera would capture, rendered from the lens with the datasheet's 110° diagonal field of view. The notebook shows the 96 × 96 grayscale input of the model.
+- What is real: board geometry and part positions, camera facts (Himax HM01B0, 324 × 324 px, 110° diagonal), LED roles (Camera LED green, on during capture; User LED green, off by default), and the decision of the example code (`person_score > no_person_score` → `LedSet(Led::kUser, …)`; model on the Cortex-M7, not the Edge TPU). What is simulated: the detector (it scores how much of the figure is in the frame and the light level, it is not a neural network) and the cycle timing. Sources are listed in the chapter (How it works) and in `src/books/coral/presence.js`.
+- Files: `src/books/coral/` (`index.js`, `chapter1.js`, `presenceScene.js`, `presence.js`, `boardModel.js`, `pageContent.js`, `cover.js`, `model/`), `tests/coralPresence.test.mjs`.
+- Checks that ran without hardware: `npm test` (`tests/coralPresence.test.mjs`: facts, field of view, pinhole projection, detector thresholds, dark room, cycle order and LED rule, integrity of the converted model, positions of the camera and LEDs against the official drawing). The chapter was also driven in headless Chrome (software WebGL), desktop and mobile emulation. **Not done:** nothing was run on a real Dev Board Micro.
 
 ## Adding a book
 

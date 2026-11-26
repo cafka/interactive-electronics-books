@@ -730,3 +730,51 @@ body.reading .library-btn { display: none; }
 .slider-ctl input[type=range]:disabled { opacity: 0.45; }
 .explain-list details, .steps-list details { margin-top: 4px; font-size: 12.5px; color: var(--ink-soft); }
 .explain-list summary, .steps-list summary { cursor: pointer; font-weight: 600; color: var(--teal); }
+/* Coral book, chapter 1: two LEDs told apart by name, icon and words (not only by colour) */
+.led-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0 8px; }
+.led-chip { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border: 2px solid rgba(43,39,64,0.25); border-radius: 10px; background: #fffaf0; }
+.led-chip > div { display: flex; flex-direction: column; min-width: 0; }
+.led-chip span { font-size: 11px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.06em; }
+.led-chip b { font-size: 16px; letter-spacing: 0.04em; }
+.led-chip small { font-size: 12px; color: var(--ink-soft); }
+.led-ico { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: #555a70; background: #e6e2d6; border: 2px dashed #8c93b3; }
+.led-ico svg { width: 20px; height: 20px; }
+.led-chip.on { border-color: #1f8a46; background: #e5f5e8; }
+.led-chip.on b { color: #16703a; }
+.led-chip.on .led-ico { color: #0d4f27; background: #7be3a0; border: 2px solid #1f8a46; box-shadow: 0 0 0 4px rgba(61,220,110,0.28); }
+.cp-steps { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 12px; }
+.cp-step { border: 1px solid rgba(43,39,64,0.2); border-radius: 12px; padding: 10px 12px 12px; background: rgba(255,255,255,0.35); }
+.cp-step h3 { margin: 0 0 6px; display: flex; align-items: center; gap: 8px; }
+.cp-step h3 i { font-style: normal; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 13px; }
+.cp-step p { margin: 6px 0; }
+.choice .btn.chosen { background: var(--ink); color: #f3ecd6; }
+.choice .btn:disabled { opacity: 0.7; cursor: default; }
+.reveal { margin-top: 8px; padding: 8px 10px; border-left: 4px solid var(--teal); background: rgba(31,111,120,0.08); border-radius: 6px; }
+.reveal p, .quiz-out { margin: 4px 0; font-size: 13.5px; }
+.good { color: #1f7a42; }
+.bad { color: #a1342b; }
+.cp-view { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; margin-top: 6px; }
+.px96-wrap { margin: 0; text-align: center; }
+.px96 { width: 144px; height: 144px; image-rendering: pixelated; border: 2px solid #1b2133; border-radius: 4px; background: #333; display: block; }
+.px96-wrap figcaption { font-size: 11.5px; color: var(--ink-soft); margin-top: 4px; max-width: 150px; }
+.scores { min-width: 0; }
+.score-row { display: grid; grid-template-columns: 70px 1fr 38px; gap: 6px; align-items: center; font-size: 12.5px; margin: 4px 0; }
+.score-row b { text-align: right; font-variant-numeric: tabular-nums; }
+.bar { height: 12px; border-radius: 6px; background: rgba(43,39,64,0.12); overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: #8c93b3; transition: width 0.2s; }
+.bar i.win { background: #2e9e55; }
+.part-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.part-btns .chip-btn.active { background: #ffb020; color: #2b2740; border-color: #c98a00; }
+.part-info { min-height: 2.6em; padding: 6px 8px; border-radius: 6px; background: rgba(255,176,32,0.12); font-size: 13.5px; }
+.pipe { list-style: none; padding: 0; margin: 8px 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.pipe li { border: 1px solid rgba(43,39,64,0.25); border-radius: 8px; padding: 6px; font-size: 12px; line-height: 1.25; display: flex; flex-direction: column; gap: 2px; }
+.pipe li b { font-size: 13px; color: var(--accent); }
+.pipe li.active { background: #2b2740; color: #f3ecd6; border-color: #2b2740; }
+.pipe li.active b { color: #ffd27a; }
+.quiz { display: grid; gap: 6px; }
+.quiz-opt { text-align: left; }
+.quiz-opt.right { background: #e5f5e8; border-color: #1f8a46; color: #16703a; }
+.quiz-opt.wrong { background: #fbe7e3; border-color: #c0392b; color: #8f2a22; }
+.bridge { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: rgba(181,67,42,0.08); font-size: 13.5px; }
+@media (max-width: 900px) { .pipe { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 420px) { .led-pair { grid-template-columns: 1fr; } .cp-view { grid-template-columns: 1fr; justify-items: center; } }
