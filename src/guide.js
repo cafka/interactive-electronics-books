@@ -29,12 +29,12 @@ export const GUIDE_SECTIONS = [
   ['references', 'References'],
 ];
 const RULES = [
-  ['materials', /you will need|parts list|materials|bill of materials|what you need|components needed/i],
+  ['materials', /you will need|parts list|materials|bill of materials|what you need|components needed|environment and dependencies|requirements/i],
   ['troubleshooting', /diagnos|troubleshoot/i],
   ['exercises', /exercise/i],
   ['safety', /safety|warning|caution|precaution|cannot detect|what it cannot|can and cannot/i],
   ['references', /^sources?$|references|documentation|further reading/i],
-  ['steps', /assembly|step by step|upload|run it|try it|calibrat|set ?up|install|programming the|build it/i],
+  ['steps', /assembly|step by step|upload|run it|try it|calibrat|set ?up|install|programming the|build it|get the code|^build the|^flash the/i],
   ['wiring', /schematic|wiring|connection|pins\b|pinout|path of the signal/i],
 ];
 /** Which section a heading belongs to. `fallback` is used when no rule matches. */

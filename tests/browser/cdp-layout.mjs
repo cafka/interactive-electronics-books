@@ -12,7 +12,7 @@ const DEVS = {
   'phone-land': [844, 390, true], 'tablet-portrait': [768, 1024, true], 'tablet-land': [1024, 768, true], desktop: [1400, 900, false],
 };
 const [W, H, MOBILE] = DEVS[DEV];
-const CHAPTERS = [['raspberry-pi', 1], ['esp32', 2], ['coral', 1]].filter(([b]) => !BOOKS || BOOKS === 'all' || BOOKS.split(',').includes(b));
+const CHAPTERS = [['raspberry-pi', 1], ['esp32', 2], ['coral', 1], ['coral', 2]].filter(([b]) => !BOOKS || BOOKS === 'all' || BOOKS.split(',').includes(b));
 const DL = join(OUT, 'downloads-' + DEV);
 const chrome = spawn((process.env.CHROME || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'), ['--headless=new', `--remote-debugging-port=${PORT}`, `--user-data-dir=${join(OUT, 'profile-layout-' + DEV)}`, '--window-size=1400,1100', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-first-run', 'about:blank'], { stdio: 'ignore' });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -173,7 +173,7 @@ try {
     ok(!c.pageHScroll && !c.panelHScroll && !c.wide.length, `no horizontal scroll: page ${c.pageHScroll}, notebook ${c.panelHScroll}, wider than the screen: ${c.wide.join(', ') || 'none'}; inner scrollers: ${c.innerHScroll.join(', ') || 'none'}`);
     if (MOBILE) ok(c.smallCount === 0, `touch targets >= 44 px: ${c.smallCount ? c.small.join(', ') : 'all'}`);
     else say(`info desktop controls under 44 px (mouse): ${c.smallCount}`);
-    await shot(`L-${bk}-${DEV}-1-entry.png`);
+    await shot(`L-${bk}${ch > 1 ? ch : ''}-${DEV}-1-entry.png`);
     // labels: none at first; a hover (mouse) or tap shows one; empty space or moving away hides it; a drag shows none
     let L = await labelsOnScreen();
     ok(L.length === 0 && (await evalJs('book3d.labelsShown')) === false, `no labels at first (${L.length})`);
@@ -202,7 +202,7 @@ try {
       ok(L.length === 1 && L[0] === p1.t, `${MOBILE ? 'tap' : 'click'} on "${p1.t}": only its label (${JSON.stringify(L)})`);
       const lr = await J(`(() => { const t = [...document.querySelectorAll('#labels .label:not(.hidden):not(.collapsed) .tag')][0]; if (!t) return null; const b = t.getBoundingClientRect(); return { l: Math.round(b.left), r: Math.round(b.right), t: Math.round(b.top), b: Math.round(b.bottom) }; })()`);
       ok(!!lr && lr.l >= 0 && lr.r <= W && lr.t >= 0 && lr.b <= H, `its label is fully on screen (${JSON.stringify(lr)})`);
-      await shot(`L-${bk}-${DEV}-2-one-label.png`);
+      await shot(`L-${bk}${ch > 1 ? ch : ''}-${DEV}-2-one-label.png`);
       await tap(p2.p[0], p2.p[1]);
       if (!MOBILE) { await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: empty[0], y: empty[1] }); await frames(2); }
       L = await labelsOnScreen();
@@ -235,20 +235,20 @@ try {
       else ok(page.tab === 'book' && page.left && Math.abs(page.cx) < 6 && Math.abs(page.cy) < 6 && page.l >= page.i.l - 1 && page.r <= innerW(page) && Math.max(pw / page.fw, ph / page.fh) > 0.9, `Book tab: the page flat, centred (${Math.round(page.cx)}, ${Math.round(page.cy)}), ${Math.round(pw)} x ${Math.round(ph)} px in ${page.fw} x ${page.fh}`);
       c = await J(CHROME);
       ok(!c.overlaps.length && !c.offScreen.length && (c.smallCount === 0), `Book tab controls: overlaps ${c.overlaps.join(', ') || 'none'}, cut ${c.offScreen.join(', ') || 'none'}, small ${c.small.join(', ') || 'none'}`);
-      await shot(`L-${bk}-${DEV}-3-tab-book.png`);
+      await shot(`L-${bk}${ch > 1 ? ch : ''}-${DEV}-3-tab-book.png`);
       // Notebook tab: everything, scrolling, nothing wider than the screen
       await clickSel('.view-tab[data-tab=notebook]');
       await frames(2);
       const nb = await J(`(() => { const p = document.querySelector('#panel'); const r = p.getBoundingClientRect(); const t = document.querySelector('#tabSim p, #tabSim li'); return { tab: book3d.tab, top: r.top, bottom: r.bottom, left: r.left, right: r.right, scrolls: p.scrollHeight > p.clientHeight + 4, font: t ? parseFloat(getComputedStyle(t).fontSize) : 0, pager: getComputedStyle(document.querySelector('.pager')).display, guide: !!document.querySelector('#guideBtn').getBoundingClientRect().width }; })()`);
       c = await J(CHROME);
       ok(nb.tab === 'notebook' && nb.scrolls && nb.font >= 14 && nb.pager !== 'none' && nb.guide && !c.panelHScroll && !c.wide.length && !c.overlaps.length && c.smallCount === 0, `Notebook tab: ${Math.round(nb.right - nb.left)} x ${Math.round(nb.bottom - nb.top)} px, scrolls ${nb.scrolls}, text ${nb.font}px, pager ${nb.pager}, guide button ${nb.guide}, horizontal overflow ${c.panelHScroll} ${c.wide.join(', ')}, overlaps ${c.overlaps.join(', ') || 'none'}, small ${c.small.join(', ') || 'none'}`);
-      await shot(`L-${bk}-${DEV}-4-tab-notebook.png`);
+      await shot(`L-${bk}${ch > 1 ? ch : ''}-${DEV}-4-tab-notebook.png`);
       for (const tab of ['code', 'how']) {
         await clickSel(`.tab-btn[data-tab=${tab}]`);
         await frames(1);
         c = await J(CHROME);
         ok(!c.panelHScroll && !c.wide.length, `Notebook tab "${tab}": nothing wider than the screen (${c.wide.join(', ') || 'ok'}; inner scrollers ${c.innerHScroll.join(', ') || 'none'})`);
-        await shot(`L-${bk}-${DEV}-5-notebook-${tab}.png`);
+        await shot(`L-${bk}${ch > 1 ? ch : ''}-${DEV}-5-notebook-${tab}.png`);
       }
       await clickSel('.tab-btn[data-tab=sim]');
       // back to the experiment: same chapter, simulation kept
@@ -260,7 +260,7 @@ try {
       m = await J(MEASURE);
       const simOk = !has || (after.running === before.running && (after.state ?? after.u ?? null) === (before.state ?? before.u ?? null));
       ok(m.tab === 'experiment' && (await evalJs('book3d.current')) === ch - 1 && simOk, `Experiment tab again: chapter kept, simulation kept (${has ? JSON.stringify({ running: after.running, state: after.state, u: after.u }) : 'no inspect'})`);
-      await shot(`L-${bk}-${DEV}-6-tab-experiment.png`);
+      await shot(`L-${bk}${ch > 1 ? ch : ''}-${DEV}-6-tab-experiment.png`);
     }
     // the guide: a real file is downloaded and is a valid PDF
     if (PDF) {
@@ -279,7 +279,7 @@ try {
         say('pdf ' + JSON.stringify({ file, ...p }));
         ok(okClick && p.header && p.eof && p.xrefOk && p.badOffsets === 0 && p.pages >= 2 && p.images >= 1 && p.has.includes('Objective') && p.has.includes('Page 1 of') && p.codeFont && toast.shown, `guide PDF downloaded "${file}" (${Math.round(p.size / 1024)} kB, ${p.pages} pages, ${p.images} pictures, sections found: ${p.has.join(', ')}), notice shown: "${toast.text}"`);
       } else ok(false, `guide PDF: no file in ${Math.round((Date.now() - t1) / 1000)} s (lastGuide ${JSON.stringify(lg)}, notice ${JSON.stringify(toast)})`);
-      await shot(`L-${bk}-${DEV}-7-guide-notice.png`);
+      await shot(`L-${bk}${ch > 1 ? ch : ''}-${DEV}-7-guide-notice.png`);
       if (tabbedExpected) await clickSel('.view-tab[data-tab=experiment]');
     }
     // orientation / size change keeps the chapter and frames the book again
@@ -291,7 +291,7 @@ try {
       m = await J(MEASURE);
       c = await J(CHROME);
       ok(m.inside && Math.max(m.useW, m.useH) > 0.9 && Math.abs(m.offX) <= 4 && Math.abs(m.offY) <= 4 && !c.overlaps.length && !c.offScreen.length && !c.pageHScroll && (await evalJs('book3d.current')) === ch - 1, `rotated to ${H}x${W} (${m.mode}): book framed again (${m.useW} x ${m.useH}, ${m.offX}, ${m.offY}), overlaps ${c.overlaps.join(', ') || 'none'}, cut ${c.offScreen.join(', ') || 'none'}`);
-      await shot(`L-${bk}-${DEV}-8-rotated.png`);
+      await shot(`L-${bk}${ch > 1 ? ch : ''}-${DEV}-8-rotated.png`);
       await send('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: 1, mobile: MOBILE, screenOrientation: { type: W > H ? 'landscapePrimary' : 'portraitPrimary', angle: W > H ? 90 : 0 } });
       await frames(2);
     }

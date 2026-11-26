@@ -40,6 +40,58 @@ const pipeline = svgWrap(860, 250, `
   <path d="M10 44 H850" stroke="${TEAL}" stroke-width="4" stroke-linecap="round"/>`,
 'One cycle of the person detection demo: the camera captures a 324 by 324 image, it is reduced to 96 by 96 grayscale pixels, a model on the Cortex-M7 scores person and no person, and the program turns the User LED on if person wins. The cycle repeats for every frame. The Camera LED stays on the whole time the camera captures');
 
+/* Chapter 2: the cascade of the official app multicore_model_cascade, as its source runs it. */
+const cascadeSvg = svgWrap(860, 330, `
+  <defs><marker id="cca" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" refX="11" refY="6" orient="auto"><path d="M0 0 L12 6 L0 12 Z" fill="${INK}"/></marker></defs>
+  <g stroke="${INK}" stroke-width="3" fill="none">
+    <rect x="8" y="70" width="250" height="150" rx="14" fill="#f6e3c4"/>
+    <rect x="330" y="70" width="250" height="150" rx="14" fill="#e7dcf3"/>
+    <rect x="652" y="70" width="200" height="150" rx="14" fill="#eef0f4"/>
+    <path d="M258 120 H329" marker-end="url(#cca)"/>
+    <path d="M580 120 H651" marker-end="url(#cca)"/>
+    <path d="M651 175 H581" marker-end="url(#cca)"/>
+    <path d="M455 220 V262 H133 V221" stroke-dasharray="7 6" marker-end="url(#cca)"/>
+  </g>
+  <g fill="${INK}" font-size="21" font-weight="700" text-anchor="middle">
+    <text x="133" y="104">1 · Cortex-M4</text><text x="455" y="104">2 · Cortex-M7</text><text x="752" y="104">3 · Edge TPU</text>
+  </g>
+  <g fill="${INK}" font-size="16" text-anchor="middle">
+    <text x="133" y="134">person detection</text><text x="133" y="157">96 × 96 gray, TFLM</text><text x="133" y="180">User LED = person</text><text x="133" y="203">until a person</text>
+    <text x="455" y="134">camera 324 × 324 RGB</text><text x="455" y="157">JPEG + poses to the PC</text><text x="455" y="180">runs the decoder</text><text x="455" y="203">wakes on a person</text>
+    <text x="752" y="134">PoseNet</text><text x="752" y="157">MobileNet v1 0.75</text><text x="752" y="180">17 keypoints</text><text x="752" y="203">per person</text>
+  </g>
+  <g fill="${ACCENT}" font-size="16" font-weight="700" text-anchor="middle">
+    <text x="294" y="110">person</text><text x="616" y="110">frame</text><text x="616" y="200">result</text>
+    <text x="294" y="290">no pose for 5 s: back to the M4</text>
+  </g>
+  <g fill="${TEAL}" font-size="17" font-weight="700">
+    <text x="12" y="34">One NXP i.MX RT1176 chip, two cores: they take turns</text>
+  </g>
+  <path d="M10 46 H850" stroke="${TEAL}" stroke-width="4" stroke-linecap="round"/>`,
+'The cascade of the multicore model cascade app: the Cortex-M4 runs a small person detection model on 96 by 96 grayscale frames and sets the User LED. When it finds a person it wakes the Cortex-M7, which captures 324 by 324 color frames, sends them to the computer as JPEG and runs the PoseNet model on the Edge TPU, which finds 17 keypoints per person; the M7 decodes them and sends them to the computer. After 5 seconds without a pose the M7 stops and the M4 searches again');
+
+export const CORAL_CASCADE_PAGE = {
+  eyebrow: 'CHAPTER 2  ·  TWO CORES, TWO MODELS',
+  title: ['Wake up the AI:', 'Intelligent pose detection'],
+  pageNumber: 3,
+  blocks: [
+    { type: 'p', text: 'In chapter 1 one small model looked for a person. Here that answer wakes a bigger model that finds the pose of the body: where the head, the arms and the legs are.' },
+    { type: 'numbered', items: [
+      'Predict: when someone walks in, which core starts working?',
+      'Experiment: walk in and out, change the arms and the legs.',
+      'Understand: follow each frame from the camera to the computer.',
+      'Check: the User LED stays on. Is someone still there?',
+    ] },
+    { type: 'h', text: 'A CASCADE OF MODELS' },
+    { type: 'svg', svg: cascadeSvg, w: 860, h: 330 },
+    { type: 'cards', items: [
+      { head: 'CORTEX-M4 · 400 MHz', tone: 'teal', body: 'Watches while no one is there, with a tiny model. Says only: person or no person.' },
+      { head: 'CORTEX-M7 · EDGE TPU', tone: 'red', body: 'Wakes for a person. Finds 17 body keypoints and sends them to the computer.' },
+    ] },
+    { type: 'p', text: 'Both models run on the board. The computer only receives the frames and the keypoints the board sends, and draws them.' },
+  ],
+};
+
 export const CORAL_PRESENCE_PAGE = {
   eyebrow: 'CHAPTER 1  ·  CAMERA, MODEL, LED',
   title: ['How does Coral know', 'someone is there?'],

@@ -10,7 +10,7 @@ for (const f of files.sort()) {
   let book = '';
   const per = {};
   for (const l of lines) {
-    const m = /^=== (\S+) /.exec(l);
+    const m = /^=== (\S+ ch\d+) /.exec(l);
     if (m) { book = m[1]; per[book] = { pass: 0, fail: [], skip: [] }; continue; }
     if (!book) continue;
     if (l.startsWith('PASS')) per[book].pass++;

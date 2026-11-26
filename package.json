@@ -6,6 +6,6 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test tests/traffic.test.mjs tests/doorAlarm.test.mjs tests/plantWatering.test.mjs tests/catFeeder.test.mjs tests/coralPresence.test.mjs tests/guide.test.mjs tests/pdf.test.mjs"
+    "test": "node --test tests/traffic.test.mjs tests/doorAlarm.test.mjs tests/plantWatering.test.mjs tests/catFeeder.test.mjs tests/coralPresence.test.mjs tests/guide.test.mjs tests/pdf.test.mjs tests/coralCascade.test.mjs"
   }
 }

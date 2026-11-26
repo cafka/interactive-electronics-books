@@ -132,6 +132,45 @@ python3 python/traffic_light.py
 - Files: `src/books/coral/` (`index.js`, `chapter1.js`, `presenceScene.js`, `presence.js`, `boardModel.js`, `pageContent.js`, `cover.js`, `model/`), `tests/coralPresence.test.mjs`.
 - Checks that ran without hardware: `npm test` (`tests/coralPresence.test.mjs`: facts, field of view, pinhole projection, detector thresholds, dark room, cycle order and LED rule, integrity of the converted model, positions of the camera and LEDs against the official drawing). The chapter was also driven in headless Chrome (software WebGL), desktop and mobile emulation. **Not done:** nothing was run on a real Dev Board Micro.
 
+## Coral Dev Board Micro, chapter 2: Wake up the AI: Intelligent pose detection
+
+- Based on the official app **`apps/multicore_model_cascade`** of `google-coral/coralmicro`. It is an app, not one of the `examples/`. Before the chapter was written, these were read in the repository: its README, `multicore_model_cascade_cm4.cc`, `multicore_model_cascade_cm7.cc`, the host client `multicore_model_cascade.py`, `CMakeLists.txt`, `requirements.txt`, and `libs/tensorflow/posenet.h`, `libs/base/led.h`, `libs/camera/camera.h`. The guide "Get started with the Dev Board Micro" (section 6, "Try multi-core model cascading") was read too. The app is written for this board.
+- What the chapter teaches, as the source runs it:
+  - The **Cortex-M4** runs `person_detect_model.tflite` (TensorFlow Lite for Microcontrollers, 96 × 96 grayscale, `kY8`, rotated 270°), and after every frame sets `LedSet(Led::kUser, person_detected)`. The orange Status LED is turned on once the model is loaded.
+  - On "person", the M4 disables the camera, sends an IPC message and suspends itself.
+  - The **Cortex-M7** opens the **Edge TPU** (`PerformanceMode::kMax`) at start. When woken it captures 324 × 324 RGB frames, sends each one as JPEG (quality 75), and runs `posenet_mobilenet_v1_075_324_324_16_quant_decoder_edgetpu.tflite` (Edge TPU operator plus PoseNet decoder operator). Poses scoring at least 0.4 go out as JSON, with 17 keypoints each, on TCP port 27000.
+  - Once a second the M7 checks; after **5 s without a pose** it hands back to the M4.
+  - The Python client draws keypoints scoring at least 0.2 and the 19 lines between them. While the board is back on the M4, it shows "Waiting for Person Detection".
+- **Notebook:**
+  - *Simulate*: the four LEDs, the state of each core and the Edge TPU, the 5 s timer. Four steps: predict which part starts working; experiment (walk in and out, seven poses, or automatic pose changes); understand (parts and the nine steps of the cascade); check (why the User LED stays on).
+  - *C++*: the two official programs, shortened with `// ...`, and what the code does. Then materials, environment and dependencies, getting the code, building, flashing, running, seeing the results (client and serial console), the Wi-Fi, Ethernet and demo builds, and troubleshooting.
+  - *How it works*: checked facts, the 17 keypoints, what is real and what is simulated, the link with chapter 1, and the sources.
+- **Discrepancies found in the official material**, stated on the page:
+  - The README says the white Edge TPU LED turns on when the M7 starts the pose model, but the app's code never calls `LedSet(Led::kTpu)`, and the M7 opens the Edge TPU once at start. The page lights the LED during the pose phase, as the README describes; this was not checked on a board.
+  - In the demo build, the M4 timer is 10 s, while its comment says 5 s.
+  - The guide's requirements list Linux or macOS. The app's README says the USB variant works with Linux and Windows only.
+- **Simulated:** both models.
+  - The person detector is the stand-in of chapter 1.
+  - A keypoint counts as found when its point on the figure falls inside the camera's frame; occlusion is not modelled.
+  - A pose is reported when the nose and both shoulders are in the frame and the room is lit.
+  - No pose or keypoint scores, frame rates or latencies are computed or shown.
+  - The step timing is slowed down. The two M7 tasks run one after the other here, but in parallel on the board.
+  - The 5 s and 1 s timers are the app's own.
+- **Scene:** the official CAD model, shared with chapter 1 (`buildPresenceScene({ posable, panel: 'client', cascade })`; chapter 1 keeps the defaults). It adds:
+  - a figure with elbows and knees, and markers at the 17 keypoints;
+  - the routes camera → MCU → Edge TPU → MCU → USB;
+  - the white and orange LEDs;
+  - a copy of the host client window, which shows only the frames the board sends, with the pose drawn in the client's colours.
+- **URL:** `?book=coral&open=1&lesson=2`.
+- **Files:** `src/books/coral/chapter2.js`, `cascade.js` (pure logic, facts, keypoints and edges), plus the additions to `presenceScene.js` and `pageContent.js`. Tests: `tests/coralCascade.test.mjs` and `tests/browser/cdp-cascade.mjs`.
+- **Checks that ran without hardware:**
+  - `npm test` runs `tests/coralCascade.test.mjs`. It checks the facts against the source, the 17 keypoints and 19 edges, and the stand-in pose rule. It also checks the boot messages, the hand-over and its console messages in the source's order, and the User LED kept on while the M7 works. Then the return to the M4 between 5 s and 6 s after the last pose, the "Poses: N" logging rule, and that the commands and code lines shown are the official ones.
+  - The chapter ran in headless Chrome with software WebGL, using `tests/browser/cdp-cascade.mjs`. It covers start-up, the hand-over, the pose with 15 of 17 keypoints found (the ankles are below the frame), arms up and knee up, the return to the M4, the User LED off, the "Waiting" text, the notebook, the guide sections and page errors.
+    - At 390 px, 15 of 15 checks passed.
+    - On desktop, 14 of 15 passed. The one failure was a bug in the test (it read the guide through a Promise), which was then fixed. On desktop the guide PDF was checked by the layout suite.
+  - `tests/browser/cdp-layout.mjs` for Coral, chapters 1 and 2, passed 44 of 44 checks at 390 px and 30 of 30 on desktop. The chapter 2 guide PDF downloaded valid: 9 pages, with the 3D picture and the diagram.
+  - **Not done:** nothing was compiled, flashed or run on a real Dev Board Micro, and the commands were not run.
+
 ## Adding a book
 
 Create `src/books/<id>/index.js` with `{ id, name, board, title, blurb, eyebrow, coverColor, lessons, paintCover, coverTexture, canvasLabel }` and add it to `src/books/index.js`. A chapter may set `codeTab` (the code tab label, default `Python`). A book is built the first time it is chosen.
@@ -174,7 +213,7 @@ Branch `backup/engine-ux-wip` contains everything on `main` plus the ESP32 chapt
 
 1. `git fetch origin && git checkout backup/engine-ux-wip`
 2. Requirements: Node.js 18+ and Chrome. There is no `npm install` and no build step. three.js is vendored in `vendor/`. The Coral model is committed as `.bin` + `.json` (`.gitattributes` marks it binary).
-3. `npm test` should give 101 tests: 100 pass and 1 is skipped when Python 3 is not installed (the `traffic_light.py` comparison).
+3. `npm test` should give 112 tests: 111 pass and 1 is skipped when Python 3 is not installed (the `traffic_light.py` comparison).
 4. `npm start`, then open <http://127.0.0.1:5173/>. Useful URLs: `?book=raspberry-pi&open=1&lesson=1`, `?book=esp32&open=1&lesson=2`, `?book=coral&open=1&lesson=1`.
 5. To merge: open a pull request from `backup/engine-ux-wip` into `main` and run the manual checks below on real devices first.
 
