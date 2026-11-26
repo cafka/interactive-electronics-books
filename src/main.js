@@ -4,7 +4,8 @@ import { BOOKS, DEFAULT_BOOK, getBook } from './books/index.js';
 import { createShell } from './ui.js';
 import { buildReader } from './pageContent.js';
 import { measureLeftPage } from './textures.js';
-import { buildGuideHtml, guideFileName, printGuide } from './guide.js';
+import { buildGuideHtml, guideFileName } from './guide.js';
+import { guidePdf, downloadFile } from './guidePdf.js';
 
 const $ = (s) => document.querySelector(s);
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -174,14 +175,24 @@ const GLOBAL_VIEWS = {
 const size = { w: 1, h: 1 };
 let panelAmt = 0; // 0 notebook hidden .. 1 notebook fully shown (set every frame)
 /*
- * Layouts (the same rules are in styles.css):
+ * Layouts, chosen from the real size of the window (styles.css follows the body classes set here):
+ *   tabbed (width < 600 px or height < 500 px: phones, in either orientation): the book, the experiment and the
+ *     notebook do not fit side by side, so they are three views with compact tabs ("Book", "Experiment",
+ *     "Notebook"): at the bottom in portrait, as a rail on the left in landscape. Switching keeps everything.
  *   wide (> 900 px): the notebook is a column on the right (420 px + 16 px margin);
- *   narrow and portrait or square (<= 900 px, width / height <= 4/3): the notebook is a sheet at the bottom;
- *   narrow and landscape (phones turned sideways): a slimmer column on the right, because a bottom sheet would
- *   leave the book a strip of 200 px.
+ *   narrow and portrait or square (<= 900 px, width / height <= 4/3, tablets upright): a sheet at the bottom;
+ *   narrow and landscape: a slimmer column on the right.
  */
-const isNarrow = () => size.w <= 900 && size.w / size.h <= 4 / 3; // bottom sheet layout
-const isCompactSide = () => size.w <= 900 && !isNarrow();
+let tabbed = false; // phone layout with Book / Experiment / Notebook tabs
+const coarse = window.matchMedia('(pointer: coarse)').matches; // touch screen: 44 px controls
+let rail = false; // tabbed, landscape: the tabs are a column on the left
+const TOP_BAR = 52; // tabbed: height of the top toolbar (styles.css .cam-bar / .left-bar in body.tabbed)
+const TAB_BAR = 58; // tabbed portrait: height of the tab bar at the bottom (styles.css .view-tabs)
+const RAIL_W = 76; // tabbed landscape: width of the tab rail on the left
+/** Screen px taken by the fixed toolbars of the tabbed layout (none in the other layouts). */
+const insets = () => (!tabbed ? { t: 0, b: 0, l: 0, r: 0 } : rail ? { t: TOP_BAR, b: 0, l: RAIL_W, r: 0 } : { t: TOP_BAR, b: TAB_BAR, l: 0, r: 0 });
+const isNarrow = () => !tabbed && size.w <= 900 && size.w / size.h <= 4 / 3; // bottom sheet layout
+const isCompactSide = () => !tabbed && size.w <= 900 && !isNarrow();
 const panelW = () => (isCompactSide() ? Math.min(360, size.w * 0.44) + 8 : 436);
 const sheetH = () => size.h * 0.52;
 let currentViewName = 'closed';
@@ -196,6 +207,10 @@ function viewDef(name) {
  */
 function fitFor(name) {
   const open = name !== 'closed';
+  if (tabbed) {
+    const i = insets();
+    return Math.max(1, 1.75 / ((size.w - i.l - i.r) / (size.h - i.t - i.b)));
+  }
   if (isNarrow()) return Math.max(1, (open ? 1.65 : 0.75) / (size.w / size.h));
   const aspect = open ? (size.w - panelW()) / size.h : size.w / size.h;
   return Math.max(1, 1.75 / aspect);
@@ -226,11 +241,28 @@ function measureContent(root) {
   }
   return pts;
 }
+/**
+ * Shift of the camera's view (screen px) so the scene is centred in the free area: away from the notebook (its
+ * share `amt` of 0..1 on screen), or from the toolbars of the tabbed layout.
+ */
+function viewOffset(amt) {
+  if (tabbed) {
+    const i = insets();
+    return { x: -(i.l - i.r) / 2, y: -(i.t - i.b) / 2 };
+  }
+  return isNarrow() ? { x: 0, y: (sheetH() * amt) / 2 } : { x: (panelW() * amt) / 2, y: 0 };
+}
 /** The free area for the book (screen px): the window minus the notebook, the top controls and a margin. */
 function freeArea() {
-  if (isNarrow()) return { l: 8, r: size.w - 8, t: 100, b: size.h - sheetH() - 8 };
+  if (tabbed) {
+    const i = insets();
+    return { l: i.l + 8, r: size.w - i.r - 8, t: i.t + 8, b: size.h - i.b - 8 };
+  }
+  // below the camera row (it is 60 px from the top on touch screens, styles.css)
+  if (isNarrow()) return { l: 8, r: size.w - 8, t: coarse ? 114 : 100, b: size.h - sheetH() - 8 };
   if (isCompactSide()) return { l: 8, r: size.w - panelW() - 8, t: 50, b: size.h - 8 };
-  return { l: 16, r: size.w - panelW() - 16, t: 72, b: size.h - 24 };
+  // below the Library and Labels buttons (top left; 44 px tall each on touch screens), so no control covers the book
+  return { l: 16, r: size.w - panelW() - 16, t: coarse ? 112 : 98, b: size.h - 24 };
 }
 /**
  * Camera target and distance at which the open book and everything built on it are as large as possible inside the
@@ -242,8 +274,7 @@ function fitView(v) {
   const cp = runtimes[current] && contentBoxes.get(runtimes[current]);
   if (cp) pts.push(...cp);
   else pts.push(new THREE.Vector3(10, 3.5, -6), new THREE.Vector3(2, 3.5, -6)); // until measured: room for tall parts
-  const narrow = isNarrow();
-  const ox = narrow ? 0 : panelW() / 2, oy = narrow ? sheetH() / 2 : 0; // the same view offset the frame loop applies
+  const { x: ox, y: oy } = viewOffset(1); // the same view offset the frame loop applies
   const area = freeArea();
   fitCam.fov = DEFAULT_FOV;
   fitCam.aspect = size.w / size.h;
@@ -487,7 +518,8 @@ libraryBtn.addEventListener('click', showLibrary);
 
 /** Turn to lesson i. Next / Previous buttons, the arrow keys, the page corners and the corner tags all end up here. */
 function goTo(i) {
-  if (turn || reading || expanded || !bookIsOpen() || i < 0 || i >= N || i === current) return;
+  // the expanded notebook covers the book; in the tabbed layout it is the "Notebook" tab, whose pager turns the page
+  if (turn || reading || (expanded && !tabbed) || !bookIsOpen() || i < 0 || i >= N || i === current) return;
   if (leftView) exitLeftPage();
   hoverZone = focusZone = null;
   releaseInput();
@@ -583,12 +615,22 @@ function setExpanded(on) {
 expandBtn.addEventListener('click', () => setExpanded(!expanded));
 
 /* ------------------------------------------------------------------ "Download experiment guide" */
-/** A picture of the 3D book in its current view, cropped to the area the book uses (no notebook). */
+/**
+ * A picture of the whole open book and its project, whatever the reader is looking at (left page, notebook):
+ * rendered once from the "whole book" framing with a camera of its own, then cropped to the book.
+ */
 function bookSnapshot() {
   try {
-    renderer.render(scene, camera);
+    const v = GLOBAL_VIEWS.book, f = fitView(v), o = viewOffset(1);
+    const cam = new THREE.PerspectiveCamera(DEFAULT_FOV, size.w / size.h, clamp(f.r * 0.12, 0.1, 30), 600);
+    cam.position.set(f.t.x + f.r * Math.sin(v.phi) * Math.sin(v.theta), f.t.y + f.r * Math.cos(v.phi), f.t.z + f.r * Math.sin(v.phi) * Math.cos(v.theta));
+    cam.lookAt(f.t);
+    cam.setViewOffset(size.w, size.h, o.x, o.y, size.w, size.h);
+    cam.updateProjectionMatrix();
+    cam.updateMatrixWorld();
+    renderer.render(scene, cam);
     // crop to the book and its project (plus a margin), inside the area the book uses
-    const a = freeArea(), cb = contentScreenBox(), m = 18;
+    const a = freeArea(), cb = contentScreenBox(cam), m = 18;
     const x0 = clamp(cb.l - m, a.l, a.r), x1 = clamp(cb.r + m, a.l, a.r), y0 = clamp(cb.t - m, a.t, a.b), y1 = clamp(cb.b + m, a.t, a.b);
     const box = x1 - x0 > 80 && y1 - y0 > 60 ? { l: x0, t: y0, w: x1 - x0, h: y1 - y0 } : { l: a.l, t: a.t, w: a.r - a.l, h: a.b - a.t };
     const k = renderer.domElement.width / size.w;
@@ -605,14 +647,14 @@ function bookSnapshot() {
   }
 }
 /** On-screen box of what the whole-book view frames: the pages and every part built on them. */
-function contentScreenBox() {
+function contentScreenBox(cam = camera) {
   const pts = boxCorners(new THREE.Box3(new THREE.Vector3(-11.25, -1.1, -7.25), new THREE.Vector3(11.25, 0.05, 7.25)));
   const cp = contentBoxes.get(runtimes[current]);
   if (cp) pts.push(...cp);
   const c = { l: Infinity, r: -Infinity, t: Infinity, b: -Infinity };
   const v = new THREE.Vector3();
   for (const p of pts) {
-    v.copy(p).project(camera);
+    v.copy(p).project(cam);
     if (v.z >= 1) continue;
     const x = (v.x * 0.5 + 0.5) * size.w, y = (-v.y * 0.5 + 0.5) * size.h;
     c.l = Math.min(c.l, x);
@@ -626,17 +668,46 @@ function currentGuide() {
   const lesson = LESSONS[current];
   return { html: buildGuideHtml({ book: activeDef, lesson, tabs: shell.tabs, snapshot: bookSnapshot() }), fileName: guideFileName(activeDef, lesson) };
 }
-$('#guideBtn').addEventListener('click', async () => {
-  const btn = $('#guideBtn');
-  if (btn.disabled) return;
+// The button builds the PDF and downloads it (no print dialog). It says what it is doing, and a notice confirms the
+// download with a link to open the file, in case the browser keeps downloads quiet (or opens PDFs itself).
+const toastEl = $('#toast');
+let toastTimer = 0;
+function toast(html, ms = 9000) {
+  toastEl.innerHTML = html;
+  toastEl.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (toastEl.hidden = true), ms);
+}
+toastEl.addEventListener('click', (e) => e.target.closest('.toast-close') && (toastEl.hidden = true));
+let guideBusy = false;
+let lastGuide = null; // test helper: what the last download was
+async function downloadGuide() {
+  const btn = $('#guideBtn'), label = btn.querySelector('span');
+  if (guideBusy || btn.disabled) return;
+  guideBusy = true;
   btn.disabled = true;
+  btn.setAttribute('aria-busy', 'true');
+  label.textContent = 'Preparing the PDF…';
   try {
+    const lesson = LESSONS[current];
     const g = currentGuide();
-    await printGuide(g.html, g.fileName);
+    const bytes = await guidePdf(g.html, { title: `${activeDef.name} · Chapter ${lesson.number}: ${lesson.title} · Experiment guide`, subject: activeDef.title, footer: `Inside the Circuit · ${activeDef.name} · Chapter ${lesson.number}: ${lesson.title}` });
+    const name = `${g.fileName}.pdf`;
+    const url = downloadFile(bytes, name);
+    lastGuide = { name, size: bytes.length };
+    toast(`<b>Experiment guide downloaded</b><span>${name} · ${Math.max(1, Math.round(bytes.length / 1024))} kB</span><a href="${url}" target="_blank" rel="noopener">Open the PDF</a><button class="toast-close" aria-label="Close this notice">×</button>`);
+  } catch (err) {
+    console.error(err);
+    lastGuide = { error: String(err && err.message ? err.message : err) };
+    toast(`<b>The PDF could not be made</b><span>${String(err && err.message ? err.message : err).replace(/</g, '&lt;')}</span><button class="toast-close" aria-label="Close this notice">×</button>`, 12000);
   } finally {
-    btn.disabled = false;
+    guideBusy = false;
+    btn.disabled = !!turn;
+    btn.removeAttribute('aria-busy');
+    label.textContent = 'Download experiment guide';
   }
-});
+}
+$('#guideBtn').addEventListener('click', downloadGuide);
 
 /* ------------------------------------------------------------------ "Left page" camera view (the 3D page, seen straight on) */
 // The camera looks straight down at the left page of the 3D book with a narrow field of view (a "dolly zoom"
@@ -647,16 +718,35 @@ const leftBar = $('#leftBar');
 const leftNotebookBtn = $('#leftNotebook');
 
 function leftFraming() {
-  const hidden = leftView.notebookHidden;
-  const freeW = size.w - (!isNarrow() && !hidden ? panelW() : 0);
-  const freeH = size.h - (isNarrow() && !hidden ? sheetH() : 0) - 64; // 64 px reserved for the toolbar
+  const hidden = leftView.notebookHidden || tabbed;
+  const i = insets();
+  const freeW = size.w - (!isNarrow() && !hidden ? panelW() : 0) - i.l - i.r - (tabbed ? 12 : 0);
+  // 64 px reserved for the toolbar (the tabbed layout has its own bars, in the insets)
+  const freeH = size.h - (isNarrow() && !hidden ? sheetH() : 0) - (tabbed ? i.t + i.b + 12 : 64);
   const tan = Math.tan(THREE.MathUtils.degToRad(LEFT_FOV / 2));
-  // visible world height of the whole canvas such that the 11 x 14 page fits the free area with a small margin
-  const visH = Math.max((14 * 1.04 * size.h) / freeH, (11 * 1.04 * size.h) / freeW);
+  // visible world height of the whole canvas such that the 11 x 14 page fits the free area with a small margin;
+  // a phone on its side fits the page's width instead (readable text) and the reader drags it up and down
+  const visH = leftWidthFit() ? (11 * 1.04 * size.h) / freeW : Math.max((14 * 1.04 * size.h) / freeH, (11 * 1.04 * size.h) / freeW);
   return visH / (2 * tan);
+}
+const leftWidthFit = () => tabbed && rail;
+/** How far (world units) the page may move up or down: none when the whole page is on screen. */
+function leftPanLimitZ() {
+  const i = insets();
+  const freeH = size.h - i.t - i.b - 12;
+  const worldPerPx = (2 * leftFraming() * leftView.zoom * Math.tan(THREE.MathUtils.degToRad(LEFT_FOV / 2))) / size.h;
+  return Math.max(0, 7.2 - (freeH * worldPerPx) / 2);
 }
 function applyLeftFraming() {
   if (!leftView) return;
+  if (leftWidthFit()) {
+    const lim = leftPanLimitZ();
+    if (leftView.startTop) {
+      leftView.panZ = -lim; // a page is read from its top
+      leftView.startTop = false;
+    }
+    leftView.panZ = clamp(leftView.panZ, -lim, lim);
+  }
   rig.goalTarget.set(LEFT_CENTER[0] + leftView.panX, 0, LEFT_CENTER[2] + leftView.panZ);
   rig.goalPhi = 0.002; // straight down (not exactly 0, to keep the camera's up direction well defined)
   rig.goalTheta = 0;
@@ -665,6 +755,7 @@ function applyLeftFraming() {
 }
 function updateLeftBar() {
   leftNotebookBtn.textContent = leftView && leftView.notebookHidden ? 'Show notebook' : 'Hide notebook';
+  $('.left-bar-title').textContent = tabbed ? `Chapter ${LESSONS[current].number} · page` : 'Left page view';
 }
 function enterLeftPage() {
   if (leftView || reading || turn || !bookIsOpen()) return;
@@ -677,7 +768,7 @@ function enterLeftPage() {
       name: currentViewName, userTouched,
       t: rig.goalTarget.clone(), r: rig.goalR, phi: rig.goalPhi, theta: rig.goalTheta, fov: rig.goalFov,
     },
-    notebookHidden: true, panX: 0, panZ: 0, zoom: 1,
+    notebookHidden: true, panX: 0, panZ: 0, zoom: 1, startTop: true,
   };
   userTouched = true;
   leftBar.hidden = false;
@@ -729,8 +820,11 @@ const leftMask = $('#leftMask');
 let camAway = false;
 let lastScrollAt = -1e9;
 let camState = { view: '', play: '' };
+const camSelect = $('#camSelect');
+let camCompactCheck = true; // measure again whether the view buttons fit (new chapter, resize)
 function buildCamBar() {
-  camViews.replaceChildren(...LESSONS[current].viewButtons.map(([v, t]) => {
+  const views = LESSONS[current].viewButtons;
+  camViews.replaceChildren(...views.map(([v, t]) => {
     const b = document.createElement('button');
     b.className = 'cam-btn';
     b.dataset.view = v;
@@ -739,19 +833,124 @@ function buildCamBar() {
     b.addEventListener('click', () => userView(v));
     return b;
   }));
+  // the same views as a compact selector, used when the buttons do not fit in one row (phones, narrow tablets)
+  const other = document.createElement('option');
+  other.value = '';
+  other.textContent = 'Camera: free view';
+  other.disabled = true;
+  // every chapter opens on the whole book: the selector always offers it, even if the chapter has no button for it
+  const listed = views.some(([v]) => v === ENTRY_VIEW) ? views : [[ENTRY_VIEW, 'Whole book'], ...views];
+  camSelect.replaceChildren(other, ...listed.map(([v, t]) => {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = t;
+    return o;
+  }));
   camState = { view: '', play: '' };
+  camCompactCheck = true;
+}
+camSelect.addEventListener('change', () => camSelect.value && userView(camSelect.value));
+/** Buttons when they fit in one row, otherwise the selector. Measured with the bar on screen. */
+function fitCamBar() {
+  camCompactCheck = false;
+  if (tabbed) {
+    camBar.classList.add('compact');
+    return;
+  }
+  camBar.classList.remove('compact');
+  // too wide for the row, or wrapped onto a second row
+  const first = camViews.firstElementChild;
+  const over = camViews.scrollWidth > camViews.clientWidth + 1 || (!!first && camViews.clientHeight > first.offsetHeight * 1.7 + 8);
+  // and the bar must not run into the Library and Labels buttons on the left
+  const bar = camViews.getBoundingClientRect(), lab = camLabels.getBoundingClientRect(), lib = libraryBtn.getBoundingClientRect();
+  const hits = (r) => r.width > 0 && bar.left < r.right + 4 && r.left < bar.right + 4 && bar.top < r.bottom + 4 && r.top < bar.bottom + 4;
+  camBar.classList.toggle('compact', over || hits(lab) || hits(lib));
 }
 const camLabels = $('#camLabels');
 camLabels.addEventListener('click', () => {
   options.labels = !options.labels;
   selectedLabel = null;
 });
+
+/* ------------------------------------------------------------------ tabbed layout (phones): Book / Experiment / Notebook */
+// Three views of the same open chapter. Nothing is stopped, rebuilt or reset when switching:
+//   Book       the chapter's page, flat and centred (the "left page" camera view), with zoom;
+//   Experiment the 3D project and its simulation, as large as the screen allows, with the camera selector;
+//   Notebook   the whole notebook (simulation controls, code, how it works), scrolling (the expanded notebook).
+const viewTabs = $('#viewTabs');
+const tabButtons = [...viewTabs.querySelectorAll('.view-tab')];
+const currentTab = () => (expanded ? 'notebook' : leftView ? 'book' : 'experiment');
+function setTab(name) {
+  if (!tabbed || turn || reading || !bookIsOpen() || name === currentTab()) return;
+  if (name === 'notebook') setExpanded(true);
+  else if (name === 'book') enterLeftPage();
+  else {
+    if (expanded) setExpanded(false);
+    if (leftView) exitLeftPage();
+  }
+  viewTabs.querySelector(`[data-tab="${name}"]`).focus({ preventScroll: true });
+}
+for (const b of tabButtons) b.addEventListener('click', () => setTab(b.dataset.tab));
+// arrow keys move between the tabs (WAI-ARIA tabs pattern)
+viewTabs.addEventListener('keydown', (e) => {
+  const k = tabButtons.indexOf(document.activeElement);
+  if (k < 0) return;
+  const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+  if (step) {
+    e.preventDefault();
+    e.stopPropagation();
+    setTab(tabButtons[(k + step + tabButtons.length) % tabButtons.length].dataset.tab);
+  } else if (e.key === 'Home' || e.key === 'End') {
+    e.preventDefault();
+    setTab(tabButtons[e.key === 'Home' ? 0 : tabButtons.length - 1].dataset.tab);
+  }
+});
+let tabState = '';
+function updateTabs() {
+  const show = tabbed && bookTarget === 1 && !libraryOpen && !reading;
+  if (viewTabs.hidden === show) viewTabs.hidden = !show;
+  if (!show) return;
+  const tab = currentTab(), busy = !!turn || !bookIsOpen();
+  const key = `${tab}|${busy}`;
+  if (tabState === key) return;
+  tabState = key;
+  for (const b of tabButtons) {
+    const on = b.dataset.tab === tab;
+    b.setAttribute('aria-selected', String(on));
+    b.tabIndex = on ? 0 : -1;
+    b.disabled = busy && !on;
+  }
+}
+/** Called when the window changes size: picks the layout and moves the shared buttons into the right bar. */
+function updateLayoutMode() {
+  const t = size.w < 600 || size.h < 500;
+  const r = t && size.w > size.h;
+  if (t === tabbed && r === rail) return;
+  tabbed = t;
+  rail = r;
+  document.body.classList.toggle('tabbed', t);
+  document.body.classList.toggle('tabbed-rail', r);
+  // the Library and Labels buttons join the top toolbar in the tabbed layout, and go back to their corner otherwise
+  if (t) {
+    camBar.prepend(libraryBtn);
+    camBar.append(camLabels);
+  } else {
+    document.body.insertBefore(libraryBtn, $('#intro'));
+    document.body.insertBefore(camLabels, viewTabs);
+  }
+  if (t && leftView) leftView.notebookHidden = true;
+  if (leftView) updateLeftBar();
+  tabState = '';
+  camCompactCheck = true;
+  camState.labels = '';
+}
 camPlay.addEventListener('click', () => {
   const rt = runtimes[current];
   if (!turn && rt.setRunning) rt.setRunning(!rt.isRunning());
 });
 const hideCamBar = () => {
   lastScrollAt = performance.now();
+  if (tabbed) return; // the toolbar of the tabbed layout has its own strip of the screen: it stays
   if (!camAway) {
     camAway = true;
     camBar.classList.add('away');
@@ -777,28 +976,35 @@ function updateCamBar(amt) {
   const lm = labelMode(); // kept up to date even while the bar is hidden (page turn, reading)
   if (camState.labels !== lm) {
     camState.labels = lm;
-    camLabels.textContent = LABEL_MODE_TEXT[lm];
+    camLabels.querySelector('.btn-text').textContent = LABEL_MODE_TEXT[lm];
+    camLabels.setAttribute('aria-label', LABEL_MODE_TEXT[lm]);
     camLabels.setAttribute('aria-pressed', String(lm === 'auto'));
     camLabels.title = lm === 'auto' ? 'Hide the names of the parts. You can still click a part to see its name.' : 'Show the names of all the parts. You can also click a single part to see its name.';
     // the notebook's own "Show labels" checkbox (every chapter has one) says the same thing
     for (const box of document.querySelectorAll('#panel input#optLabels')) box.checked = options.labels;
   }
   if (show) {
-    camBar.style.right = isNarrow() ? '0px' : `${(panelW() * amt).toFixed(1)}px`;
+    camBar.style.right = isNarrow() || tabbed ? '0px' : `${(panelW() * amt).toFixed(1)}px`;
     const rt = runtimes[current];
     const playing = !!rt.setRunning && rt.isRunning();
     const key = rt.setRunning ? (playing ? 'on' : 'off') : 'none';
     if (camState.play !== key) {
       camState.play = key;
       camPlay.hidden = key === 'none';
-      camPlay.textContent = playing ? '❚❚ Pause' : '▶ Play';
+      camPlay.querySelector('.ico').textContent = playing ? '❚❚' : '▶';
+      camPlay.querySelector('.btn-text').textContent = playing ? 'Pause' : 'Play';
       camPlay.setAttribute('aria-pressed', String(playing));
       camPlay.setAttribute('aria-label', playing ? 'Pause the simulation' : 'Play the simulation');
+      camCompactCheck = true;
     }
     if (camState.view !== currentViewName) {
       camState.view = currentViewName;
       for (const b of camViews.children) b.setAttribute('aria-pressed', String(b.dataset.view === currentViewName));
+      const known = [...camSelect.options].some((o) => o.value && o.value === currentViewName);
+      camSelect.value = known ? currentViewName : '';
     }
+    // once the notebook has finished sliding in, the room left for the buttons is final
+    if (camCompactCheck && (amt > 0.99 || amt < 0.01)) fitCamBar();
   }
   // left page view: cover everything but the left page (x -11..0, z -7..7), so a wide screen does not show the right page
   const mask = !!leftView && leftFactor > 0.6;
@@ -852,8 +1058,16 @@ const canTurnNow = () => !turn && !reading && !leftView && !expanded && bookIsOp
  * edge of the page. A direction exists only if there is a next / previous lesson. 3D controls are tested first.
  */
 /** True if a pointer is on the disc around a bottom page corner that can turn the page. */
+/**
+ * Radius (screen px) of the disc around a bottom page corner that turns the page: generous on a large book, but
+ * never more than a tenth of the book's width, so on a phone the parts on the page can still be tapped.
+ */
+function cornerRadius(e) {
+  const [ax] = cornerPx(-11), [bx] = cornerPx(11);
+  return clamp(Math.abs(bx - ax) * 0.1, 30, e.pointerType === 'mouse' ? 92 : 112);
+}
 function nearPageCorner(e) {
-  const radius = e.pointerType === 'mouse' ? 92 : 112;
+  const radius = cornerRadius(e);
   const near = (x) => {
     const [cx, cy] = cornerPx(x);
     return Math.hypot(e.clientX - cx, e.clientY - cy) < radius;
@@ -863,7 +1077,7 @@ function nearPageCorner(e) {
 function pageZoneAt(e) {
   if (!canTurnNow()) return null;
   const canNext = current < N - 1, canPrev = current > 0;
-  const radius = e.pointerType === 'mouse' ? 92 : 112;
+  const radius = cornerRadius(e);
   const near = (x) => {
     const [cx, cy] = cornerPx(x);
     return Math.hypot(e.clientX - cx, e.clientY - cy) < radius;
@@ -893,6 +1107,9 @@ canvas.addEventListener('pointerdown', (e) => {
   // quick click into a long press
   drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0, zone: pageZoneAt(e), t0: e.timeStamp };
   canvas.classList.add('dragging');
+  // no label follows the camera while it turns: a label comes back only from a hover or a tap that is not a drag
+  hoverLabel = null;
+  canvas.classList.remove('info');
 });
 canvas.addEventListener('pointermove', (e) => {
   if (e.pointerId === pressPointer) {
@@ -1016,11 +1233,15 @@ for (const [zone, el] of Object.entries(tags)) {
   el.addEventListener('blur', () => focusZone === zone && (focusZone = null));
 }
 let tagState = { next: '', prev: '' };
-function updateTags(panelPx, sheetPx) {
+function updateTags(panelPx, sheetPx, ins = insets()) {
   for (const zone of ['next', 'prev']) {
     const el = tags[zone];
     const exists = zone === 'next' ? current < N - 1 : current > 0;
-    const visible = exists && canTurnNow();
+    // the tag goes on the desk below the corner; where there is no room for it there (the book fills the height),
+    // it is left out rather than laid over the pages: the curled corner and the notebook's pager still turn the page
+    const [, cyBelow] = cornerPx(zone === 'next' ? 11 : -11);
+    const room = cyBelow + 34 <= size.h - sheetPx - ins.b - 50;
+    const visible = exists && canTurnNow() && room;
     const key = visible ? `${current}` : '';
     if (tagState[zone] !== key) {
       tagState[zone] = key;
@@ -1034,8 +1255,8 @@ function updateTags(panelPx, sheetPx) {
     const [cx, cy] = cornerPx(zone === 'next' ? 11 : -11);
     // the tag sits just below the corner (on the desk), so the curled corner itself stays fully visible;
     // it is kept on screen and clear of the notebook even when the page corner is out of view
-    const x = zone === 'next' ? clamp(cx + 26, 96, size.w - panelPx - 12) : clamp(cx - 26, 12, size.w - 96);
-    const y = clamp(cy + 34, 10, size.h - sheetPx - 52);
+    const x = zone === 'next' ? clamp(cx + 26, ins.l + 96, size.w - panelPx - ins.r - 12) : clamp(cx - 26, ins.l + 12, size.w - ins.r - 96);
+    const y = clamp(cy + 34, ins.t + 10, size.h - sheetPx - ins.b - 52);
     el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(${zone === 'next' ? '-100%' : '0'}, 0)`;  }
 }
 
@@ -1120,8 +1341,11 @@ function updateLabels() {
     // areas a label must not cover: the notebook, the camera bar, and the anchor points of the other parts
     const blocked = [];
     const tops = [];
-    if (!camBar.hidden && !camBar.classList.contains('away')) tops.push(camViews, camPlay);
-    if (!camLabels.hidden) tops.push(camLabels, libraryBtn);
+    if (tabbed) tops.push(camBar, viewTabs);
+    else {
+      if (!camBar.hidden && !camBar.classList.contains('away')) tops.push(camBar.classList.contains('compact') ? camSelect : camViews, camPlay);
+      if (!camLabels.hidden) tops.push(camLabels, libraryBtn);
+    }
     for (const el of tops) {
       if (el.hidden) continue;
       const r = el.getBoundingClientRect();
@@ -1158,8 +1382,14 @@ function updateLabels() {
           }
         }
       } else if (pinned) {
-        const x = side === 'left' ? l.sx - l.w + 4.5 : l.sx - 4.5;
-        placed.push({ x, y: l.sy - l.h / 2, w: l.w, h: l.h });
+        // the label the reader asked for goes on the side where it fits on the screen (a part near an edge)
+        const xOf = (s) => (s === 'left' ? l.sx - l.w + 4.5 : l.sx - 4.5);
+        const fitsX = (s) => xOf(s) >= 4 && xOf(s) + l.w <= size.w - 4;
+        if (!fitsX(side)) {
+          const other = side === 'left' ? 'right' : 'left';
+          if (fitsX(other) || (side === 'right' ? l.sx > size.w / 2 : l.sx < size.w / 2)) side = other;
+        }
+        placed.push({ x: xOf(side), y: l.sy - l.h / 2, w: l.w, h: l.h });
       }
       placeLabel(l, side, !ok, l === selectedLabel);
     }
@@ -1170,12 +1400,17 @@ function updateLabels() {
 function resize() {
   size.w = window.innerWidth;
   size.h = window.innerHeight;
+  updateLayoutMode();
+  camCompactCheck = true;
   renderer.setSize(size.w, size.h, false);
   camera.aspect = size.w / size.h;
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', () => {
+  const wasLandscape = size.w > size.h;
   resize();
+  // turning the device frames the view again even after a manual camera move: the old framing no longer fits
+  if (wasLandscape !== size.w > size.h) userTouched = false;
   if (leftView) applyLeftFraming();
   else if (!userTouched) setView(currentViewName);
 });
@@ -1268,16 +1503,17 @@ function frame() {
   readFactor += ((reading ? 1 : 0) - readFactor) * (1 - Math.exp(-dt * 9));
   leftFactor += ((leftView ? 1 : 0) - leftFactor) * (1 - Math.exp(-dt * 6));
   leftHide += ((leftView && leftView.notebookHidden ? 1 : 0) - leftHide) * (1 - Math.exp(-dt * 7));
-  const amt = smoothstep(0.4, 0.95, bookP) * (1 - readFactor) * (1 - leftHide);
+  // (in the tabbed layout the notebook is not beside the book: it is the "Notebook" tab, shown as the expanded notebook)
+  const amt = tabbed ? 0 : smoothstep(0.4, 0.95, bookP) * (1 - readFactor) * (1 - leftHide);
   panelAmt = amt;
   const panel = $('#panel');
   panel.style.transform = expanded ? 'none' : `translate${isNarrow() ? 'Y' : 'X'}(calc(${(1 - amt).toFixed(4)} * (100% + 40px)))`;
   panel.style.visibility = amt <= 0.001 && !expanded ? 'hidden' : 'visible';
-  const ox = isNarrow() ? 0 : (panelW() * amt) / 2;
-  // narrow screens: the notebook is a bottom sheet; in the front view the toolbar also takes 64 px at the top
-  const oy = (isNarrow() ? (sheetH() * amt) / 2 : 0) - 32 * leftFactor;
-  camera.setViewOffset(size.w, size.h, ox, oy, size.w, size.h);
-  leftBar.style.right = isNarrow() ? '0px' : `${(panelW() * amt).toFixed(1)}px`;
+  const off = viewOffset(amt);
+  // in the front view the toolbar also takes 64 px at the top (the tabbed layout counts its bars in viewOffset)
+  camera.setViewOffset(size.w, size.h, off.x, off.y - (tabbed ? 0 : 32 * leftFactor), size.w, size.h);
+  leftBar.style.right = isNarrow() || tabbed ? '0px' : `${(panelW() * amt).toFixed(1)}px`;
+  updateTabs();
 
   updateRig(dt);
   camera.updateMatrixWorld();
@@ -1289,7 +1525,7 @@ function frame() {
   const lift = (zone) => (hoverZone === zone || focusZone === zone ? 1 : 0.6);
   book.setEars(canTurn && current < N - 1 ? lift('next') : 0, canTurn && current > 0 ? lift('prev') : 0);
   book.updateEars(dt, time);
-  updateTags(isNarrow() ? 0 : panelW() * amt, isNarrow() ? sheetH() * amt : 0);
+  updateTags(isNarrow() || tabbed ? 0 : panelW() * amt, isNarrow() ? sheetH() * amt : 0);
   // the reader covers the scene, so skip drawing it; behind the expanded notebook draw it a few times a second only
   // (a chapter may show a picture made while rendering, such as the Coral camera image)
   const covered = (reading && readFactor > 0.98) || (expanded && now - lastCoveredRender < 400);
@@ -1321,7 +1557,13 @@ window.book3d = {
   get selectedLabel() { return selectedLabel?.title ?? null; },
   get viewName() { return currentViewName; },
   /** Test helper: the free area for the book and the layout in use. */
-  layout: () => ({ area: freeArea(), content: contentScreenBox(), measured: contentBoxes.has(runtimes[current]), sheet: isNarrow(), compactSide: isCompactSide(), panelW: panelW() }),
+  layout: () => ({ area: freeArea(), content: contentScreenBox(), measured: contentBoxes.has(runtimes[current]), sheet: isNarrow(), compactSide: isCompactSide(), panelW: panelW(), tabbed, rail, insets: insets(), camCompact: camBar.classList.contains('compact') }),
+  /** Tabbed layout: the view shown ('book' | 'experiment' | 'notebook') and a way to switch it. */
+  get tab() { return tabbed ? currentTab() : null; },
+  setTab,
+  downloadGuide,
+  /** Test helper: the last guide download ({ name, size } or { error }). */
+  get lastGuide() { return lastGuide; },
   /** Test helper: jump the camera straight to its goals (software rendering is slow, real GPUs glide). */
   snapRig() { rig.target.copy(rig.goalTarget); rig.r = rig.goalR; rig.theta = rig.goalTheta; rig.phi = rig.goalPhi; rig.fov = rig.goalFov; },
   project(x, y, z) {

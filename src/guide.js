@@ -7,8 +7,8 @@
  *     experiments, which state their expected results);
  *   - a picture of the 3D book, taken from the current view.
  * Every heading is sorted into the sections of the guide by its words (materials, wiring, steps, code, ...), so a new
- * chapter needs no extra work. The guide is opened in a hidden frame and printed: the browser's "Save as PDF"
- * writes the file (vector text, sharp diagrams, no extra library, works offline).
+ * chapter needs no extra work. guidePdf.js lays this document out as a PDF file that is downloaded directly
+ * (selectable text, no extra library, works offline).
  */
 
 const BRAND = 'Inside the Circuit';
@@ -252,46 +252,8 @@ export function buildGuideHtml({ book, lesson, tabs, snapshot, generated = new D
 </main></body></html>`;
 }
 
-/** File name the browser offers when saving the PDF. */
+/** File name of the PDF, without the extension. */
 export function guideFileName(book, lesson) {
   const slug = (s) => String(s).normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-');
   return `Inside-the-Circuit_${slug(book.name || book.id)}_Chapter-${lesson.number}_${slug(lesson.title)}`;
-}
-
-/**
- * Opens the print dialog for the guide (choose "Save as PDF"). Resolves when the dialog has been shown.
- * The guide is printed from a hidden frame, so the book, its chapter and its simulation stay exactly as they were.
- */
-export function printGuide(html, fileName) {
-  return new Promise((resolve) => {
-    const frame = document.createElement('iframe');
-    frame.setAttribute('aria-hidden', 'true');
-    frame.title = 'Experiment guide (print)';
-    Object.assign(frame.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0', visibility: 'hidden' });
-    const docTitle = document.title;
-    const done = () => {
-      document.title = docTitle;
-      setTimeout(() => frame.remove(), 1000);
-      resolve();
-    };
-    frame.onload = async () => {
-      const w = frame.contentWindow;
-      try {
-        await Promise.all([...w.document.images].map((im) => (im.decode ? im.decode().catch(() => {}) : null)));
-        document.title = fileName; // the browser offers the page title as the PDF file name
-        w.addEventListener('afterprint', done, { once: true });
-        w.focus();
-        w.print();
-        setTimeout(done, 120000); // in case "afterprint" never comes
-      } catch {
-        // printing from a frame is not allowed here: show the guide in a new tab instead
-        const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-        window.open(url, '_blank', 'noopener');
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
-        done();
-      }
-    };
-    frame.srcdoc = html;
-    document.body.appendChild(frame);
-  });
 }

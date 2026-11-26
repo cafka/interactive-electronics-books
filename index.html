@@ -25,7 +25,7 @@
   </section>
   <button id="libraryBtn" class="library-btn" hidden title="Back to the library of books">
     <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 4v16M10 4v16M15.5 5.5l4 .9-3.4 13.6-4-1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>
-    Library
+    <span class="btn-text">Library</span>
   </button>
 
   <div id="intro">
@@ -57,9 +57,9 @@
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span>Expand notebook</span>
         </button>
-        <button id="guideBtn" class="read-btn guide" title="A printable guide of this chapter (materials, wiring, steps, code, expected results, warnings). Choose “Save as PDF” in the print dialog.">
+        <button id="guideBtn" class="read-btn guide" title="Download a PDF guide of this chapter: materials, wiring, steps, code, how it works, expected results, warnings and references.">
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Download experiment guide
+          <span>Download experiment guide</span>
         </button>
       </div>
     </header>
@@ -87,10 +87,19 @@
   <button id="cornerPrev" class="corner-tag prev" hidden><span aria-hidden="true">‹</span> Previous</button>
 
   <div id="camBar" class="cam-bar" hidden role="toolbar" aria-label="Camera views and simulation">
-    <button id="camPlay" class="cam-btn play" hidden aria-pressed="false">▶ Play</button>
+    <button id="camPlay" class="cam-btn play" hidden aria-pressed="false"><span class="ico" aria-hidden="true">▶</span><span class="btn-text">Play</span></button>
     <div id="camViews" class="cam-views"></div>
+    <label class="cam-select-wrap"><span class="sr-only">Camera view</span><select id="camSelect" class="cam-select"></select></label>
   </div>
-  <button id="camLabels" class="labels-btn" hidden aria-pressed="false" title="Show the names of all the parts. You can also click a single part to see its name.">Show labels</button>
+  <button id="camLabels" class="labels-btn" hidden aria-pressed="false" title="Show the names of all the parts. You can also point at or tap a single part to see its name."><svg class="ico" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3.5 12.5V5a1.5 1.5 0 0 1 1.5-1.5h7.5l8 8-9 9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="8.5" cy="8.5" r="1.6" fill="currentColor"/></svg><span class="btn-text">Show labels</span></button>
+  <nav id="viewTabs" class="view-tabs" hidden aria-label="Views of the chapter">
+    <div role="tablist" aria-label="Book, experiment and notebook">
+      <button role="tab" class="view-tab" data-tab="book" aria-selected="false"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3 5.5C5.5 4 9 4 12 5.5c3-1.5 6.5-1.5 9 0V19c-2.5-1.5-6-1.5-9 0-3-1.5-6.5-1.5-9 0z M12 5.5V19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span>Book</span></button>
+      <button role="tab" class="view-tab" data-tab="experiment" aria-selected="true"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M9 3h6M10 3v6l-5.5 9.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M7.5 15h9" stroke="currentColor" stroke-width="1.8"/></svg><span>Experiment</span></button>
+      <button role="tab" class="view-tab" data-tab="notebook" aria-selected="false"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span>Notebook</span></button>
+    </div>
+  </nav>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <div id="leftMask" class="left-mask" hidden aria-hidden="true"></div>
   <div id="leftBar" class="left-bar" hidden role="toolbar" aria-label="Left page view">
     <span class="left-bar-title">Left page view</span>
