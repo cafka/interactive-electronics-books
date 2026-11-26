@@ -162,7 +162,8 @@ Create `src/books/<id>/index.js` with `{ id, name, board, title, blurb, eyebrow,
 - `src/circuit2.js`: lesson 2 scene (push-button cutaway, logic/current flows)
 - `src/pageContent.js`: written content and SVG schematics of each left page (feeds the 3D texture and Read page)
 - `src/simulation.js`, `src/ui.js`, `src/textures.js` (large canvases are built once and shared between lessons)
-- `src/guide.js`: the printable experiment guide (shared by every book), tested by `tests/guide.test.mjs`
+- `src/guide.js`: the experiment guide content (shared by every book), tested by `tests/guide.test.mjs`; `src/guidePdf.js` lays it out as a PDF with `src/pdf.js` (tested by `tests/pdf.test.mjs`)
+- `tests/browser/`: browser checks of the engine on every screen size. Run `npm start`, then `powershell -File tests/browser/run-all.ps1` (Node.js and Chrome needed; `CHROME` and `BASE_URL` may be set). `cdp-layout.mjs` checks one device, `summarize.mjs` adds up the results, and `pdf-open.mjs` opens the downloaded guides in Chrome's PDF viewer. The output goes to `tests/browser/out/`, which git ignores.
 - `src/books/coral/`: Coral Dev Board Micro book (`boardModel.js` loads `model/dev_board_micro.bin` + `.json`, converted from the official STEP; `presence.js` detector logic; `presenceScene.js`; `chapter1.js`; `pageContent.js`; `cover.js`), tested by `tests/coralPresence.test.mjs`
 - `python/led_blink.py`, `python/led_button.py`, `python/led_pwm.py`, `python/traffic_light.py`
 - `server.mjs`: dependency-free static server
@@ -181,7 +182,27 @@ Test hooks for automated browsers are on `window.book3d`: `layout()` (free area,
 
 ### Pending tests and known issues
 
-What was verified, in headless Chrome 158 with software WebGL (emulated screens, one at a time), for Raspberry Pi 5 ch. 1, ESP32 ch. 2 and Coral ch. 1: widths 320, 360, 390 and 430 px in portrait and turned to landscape, a phone in landscape (844 × 390), tablets (768 × 1024 and 1024 × 768, also turned) and desktop (1400 × 900). Checked: layout chosen, entry view (whole open book, centred, not cut), no overlapping or cut controls, no control over the book, no horizontal scroll, touch targets of 44 px, labels hidden at first, one label by hover / tap, moved by another tap, hidden by empty space or moving away, no label from a camera drag, no accidental page turn, the three tabs (page centred, notebook scrolling without horizontal overflow, simulation and chapter kept), reframing after rotation, and a real download of the guide PDF (valid structure, pages, pictures, sections, notice shown). Screenshots of every step were reviewed. `npm test` checks the PDF writer.
+**Final results (26 Nov 2026):**
+
+- `npm test`: 101 tests, 100 pass, 0 fail, 1 skipped (the Python comparison, when Python 3 is not installed).
+- Browser checks (`tests/browser/run-all.ps1`): **447 checks, 447 pass, 0 fail**. They ran in headless Chrome 158 with software WebGL, on emulated screens one at a time, for Raspberry Pi 5 ch. 1, ESP32 ch. 2 and Coral ch. 1. The screens were:
+  - phone widths 320, 360, 390 and 430 px in portrait, each also turned to landscape;
+  - a phone in landscape (844 × 390);
+  - tablets (768 × 1024 and 1024 × 768), each also turned;
+  - desktop (1400 × 900).
+- What the browser checks cover:
+  - the layout chosen for each screen;
+  - the entry view: the whole open book, centred and not cut;
+  - no overlapping or cut controls, no control over the book, no horizontal scroll, touch targets of 44 px;
+  - labels: hidden at first; one label by hover or tap; moved by a tap on another part; hidden by empty space or by moving away; fully on screen; no label from a camera drag; no accidental page turn;
+  - the three phone tabs: the page centred (fitted to the width in landscape), the notebook scrolling without horizontal overflow, the simulation and the chapter kept;
+  - reframing after rotation.
+- A real download of the guide PDF on desktop and at 390 px, for each book:
+  - Raspberry Pi 5 ch. 1: 3 pages;
+  - ESP32 ch. 2: 13 pages;
+  - Coral ch. 1: 4 pages.
+
+  Each file has a valid cross-reference table, the 3D snapshot and diagrams as pictures, the sections and the code, and the notice is shown. The three desktop files were opened in Chrome's PDF viewer (`application/pdf`). The screenshots of every step were reviewed.
 
 - **Not done:** real phones and tablets, Firefox and Safari (iOS Safari may open the PDF instead of saving it; the notice's "Open the PDF" link covers that), screen readers.
 - **Phone portrait, Experiment tab:** the whole book is as wide as the screen, so the 3D project is small. The camera selector gives the chapter's closer views.
