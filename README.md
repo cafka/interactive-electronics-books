@@ -6,13 +6,13 @@ A small library of interactive 3D books, one per board. The engine (page turn, n
 | --- | --- |
 | **Raspberry Pi 5** (Python, `gpiozero`) | 1 Light an LED · 2 Control an LED with a Button · 3 LED Brightness with PWM · 4 Traffic Light with Pedestrian Button |
 | **ESP32** (Arduino C++, ESP32-DevKitC with ESP32-WROOM-32E) | 1 Open Door Alarm (reed switch and magnet, LED, buzzer, 30 s timer) · 2 Smart Plant Watering (soil sensor, ADC, MOSFET and pump, state machine with fault lock) · 3 Smart Robotic Cat Feeder (4-DOF arm, PCA9685, load cell, kinematics, safety) |
-| **Google Coral Dev Board Micro** (C++, coralmicro) | 1 How does Coral know someone is there? (camera, person detection on the Cortex-M7, User LED) |
+| **Google Coral Dev Board Micro** (C++, coralmicro) | 1 How does Coral know someone is there? (camera, person detection on the Cortex-M7, User LED) · 2 Wake up the AI: Intelligent pose detection (Cortex-M4 person detection wakes PoseNet on the Cortex-M7 and the Edge TPU) · 3 Listening for trouble: acoustic events with local AI (microphone, YAMNet on the Edge TPU, alert thresholds) |
 
 Open the site and choose a book in the **Library**. The **Library** button (top left) goes back to it.
 
 **Live library:** <https://cafka.github.io/interactive-electronics-books/>
 
-Direct links: Raspberry Pi chapter 3 `?open=1&lesson=3` (or `?book=raspberry-pi&open=1&lesson=3`), ESP32 chapter 1 `?book=esp32&open=1&lesson=1`, ESP32 chapter 2 `?book=esp32&open=1&lesson=2`, ESP32 chapter 3 `?book=esp32&open=1&lesson=3`, Coral chapter 1 `?book=coral&open=1&lesson=1`.
+Direct links: add `?book=<book>&open=1&lesson=<n>` to the address, with `<book>` one of `raspberry-pi` (chapters 1–4), `esp32` (1–3) or `coral` (1–3). For example, Coral chapter 3: <https://cafka.github.io/interactive-electronics-books/?book=coral&open=1&lesson=3>. `?open=1&lesson=3` alone opens the Raspberry Pi book.
 
 Stack: plain ES modules + Three.js r170 (vendored in `vendor/`, no CDN, no paid APIs, works offline).
 This is a web simulation: it never touches real GPIO.
@@ -239,20 +239,20 @@ Create `src/books/<id>/index.js` with `{ id, name, board, title, blurb, eyebrow,
 - `src/pageContent.js`: written content and SVG schematics of each left page (feeds the 3D texture and Read page)
 - `src/simulation.js`, `src/ui.js`, `src/textures.js` (large canvases are built once and shared between lessons)
 - `src/guide.js`: the experiment guide content (shared by every book), tested by `tests/guide.test.mjs`; `src/guidePdf.js` lays it out as a PDF with `src/pdf.js` (tested by `tests/pdf.test.mjs`)
-- `tests/browser/`: browser checks of the engine on every screen size. Run `npm start`, then `powershell -File tests/browser/run-all.ps1` (Node.js and Chrome needed; `CHROME` and `BASE_URL` may be set). `cdp-layout.mjs` checks one device, `summarize.mjs` adds up the results, and `pdf-open.mjs` opens the downloaded guides in Chrome's PDF viewer. The output goes to `tests/browser/out/`, which git ignores.
+- `tests/browser/`: browser checks of the engine on every screen size (`cdp-smoke.mjs` for the whole library, `cdp-cascade.mjs` and `cdp-acoustic.mjs` for Coral chapters 2 and 3). Run `npm start`, then `powershell -File tests/browser/run-all.ps1` (Node.js and Chrome needed; `CHROME` and `BASE_URL` may be set). `cdp-layout.mjs` checks one device, `summarize.mjs` adds up the results, and `pdf-open.mjs` opens the downloaded guides in Chrome's PDF viewer. The output goes to `tests/browser/out/`, which git ignores.
 - `src/books/coral/`: Coral Dev Board Micro book (`boardModel.js` loads `model/dev_board_micro.bin` + `.json`, converted from the official STEP; `presence.js` detector logic; `presenceScene.js`; `chapter1.js`; `pageContent.js`; `cover.js`), tested by `tests/coralPresence.test.mjs`
 - `python/led_blink.py`, `python/led_button.py`, `python/led_pwm.py`, `python/traffic_light.py`
 - `server.mjs`: dependency-free static server
 
-## Integrating this branch
+## Branches and setup
 
-Branch `backup/engine-ux-wip` contains everything on `main` plus the ESP32 chapters 2 and 3, the Coral Dev Board Micro book and the engine UX changes (labels, entry view and auto framing, Expand notebook, experiment guide). It was not merged into `main`.
+`main` holds the complete library. On 27 Nov 2026 the work branch `backup/engine-ux-wip` was integrated into it by fast-forward. That branch already contained every other branch (`backup/esp32-plant-watering-wip`, `backup/esp32-cat-feeder-wip`, `backup/coral-micro-wip`): the ESP32 chapters 2 and 3, the Coral book with chapters 1 to 3, and the engine UX changes (labels, entry view and auto framing, phone tabs, Expand notebook, experiment guide PDF). The previous `main` is kept in `backup/main-before-integration-2026-11-27`.
 
-1. `git fetch origin && git checkout backup/engine-ux-wip`
+1. `git clone https://github.com/cafka/interactive-electronics-books`
 2. Requirements: Node.js 18+ and Chrome. There is no `npm install` and no build step. three.js is vendored in `vendor/`. The Coral model is committed as `.bin` + `.json` (`.gitattributes` marks it binary).
 3. `npm test` should give 126 tests: 125 pass and 1 is skipped when Python 3 is not installed (the `traffic_light.py` comparison).
 4. `npm start`, then open <http://127.0.0.1:5173/>. Useful URLs: `?book=raspberry-pi&open=1&lesson=1`, `?book=esp32&open=1&lesson=2`, `?book=coral&open=1&lesson=1`, `?book=coral&open=1&lesson=3`.
-5. To merge: open a pull request from `backup/engine-ux-wip` into `main` and run the manual checks below on real devices first.
+5. `tests/browser/cdp-smoke.mjs` opens the library and every chapter of every book. It checks the title, the 3D scene, the notebook, the guide, page errors, failed requests, and the chapter links and external links.
 
 Test hooks for automated browsers are on `window.book3d`: `layout()` (free area, content box, layout mode, insets), `tab` / `setTab(name)` (phones), `viewName`, `labelsShown`, `selectedLabel`, `setExpanded(bool)`, `expanded`, `guide()` (returns `{ html, fileName }`), `downloadGuide()`, `lastGuide`, `project(x, y, z)`, `snapRig()`, `debugPointer`.
 
@@ -285,19 +285,18 @@ Test hooks for automated browsers are on `window.book3d`: `layout()` (free area,
 - **Not done:** real phones and tablets, Firefox and Safari (iOS Safari may open the PDF instead of saving it; the notice's "Open the PDF" link covers that), screen readers.
 - **Phone portrait, Experiment tab:** the whole book is as wide as the screen, so the 3D project is small. The camera selector gives the chapter's closer views.
 - **Simulated touch:** taps were sent by Chrome's touch emulation with explicit timestamps (on software WebGL a frame takes about a second and a late release would count as a long press).
-- **README, Publishing:** the section below describes the private source project. `tools/publish-public.ps1` and `docs/` are not part of this repository.
-
 ## Publishing (GitHub Pages)
 
-This project (the private repo `cafka/raspberry-pi-interactive-book`) is the source. The public library is a **separate repo with its own history**, `cafka/interactive-electronics-books`, served by GitHub Pages from `main`, folder `/` (`.nojekyll` is included). There is no build step and every path is relative.
+This repository, `cafka/interactive-electronics-books`, is served by GitHub Pages from `main`, folder `/` (`.nojekyll` is included), at <https://cafka.github.io/interactive-electronics-books/>. There is no build step. Every path is relative, so the site works under the `/interactive-electronics-books/` sub-path. File names are case-sensitive on Pages, so imports must match the file names exactly.
 
-Only an allow-list is copied: `index.html`, `styles.css`, `server.mjs`, `package.json`, `README.md`, `.nojekyll`, `.gitignore`, `src/`, `vendor/`, `python/`, `arduino/`, `tests/`. `docs/`, `_test/` and anything not listed never leave this project.
+To publish a change:
 
-To update the public copy after changing the project:
-
-1. Test locally (`npm start`, `npm test`) and commit here.
-2. Run `powershell -File tools/publish-public.ps1`. It refreshes the ignored folder `.publish/` (a clone of the public repo), copies the allow-list into it, shows the changes, then commits and pushes. `-DryRun` only copies and shows the changes. It needs `gh auth login` (or git credentials) with write access to the public repo.
+1. Test locally (`npm start`, `npm test`, and the browser checks in `tests/browser/`).
+2. Commit and push to `main`.
 3. Wait for the Pages build (Actions tab, `pages build and deployment`), then reload the public URL with Ctrl+F5.
+4. The browser checks can run against the public site: set `BASE_URL=https://cafka.github.io/interactive-electronics-books` before `node tests/browser/cdp-smoke.mjs <outDir> desktop 9531`.
+
+The state of `main` before the integration of 27 Nov 2026 (commit `3b77d06`) is kept in the branch `backup/main-before-integration-2026-11-27`.
 
 ## Credits and licenses
 
