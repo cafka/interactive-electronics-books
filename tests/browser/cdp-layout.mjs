@@ -12,7 +12,7 @@ const DEVS = {
   'phone-land': [844, 390, true], 'tablet-portrait': [768, 1024, true], 'tablet-land': [1024, 768, true], desktop: [1400, 900, false],
 };
 const [W, H, MOBILE] = DEVS[DEV];
-const CHAPTERS = [['raspberry-pi', 1], ['esp32', 2], ['coral', 1], ['coral', 2]].filter(([b]) => !BOOKS || BOOKS === 'all' || BOOKS.split(',').includes(b));
+const CHAPTERS = [['raspberry-pi', 1], ['esp32', 2], ['coral', 1], ['coral', 2], ['coral', 3]].filter(([b]) => !BOOKS || BOOKS === 'all' || BOOKS.split(',').includes(b));
 const DL = join(OUT, 'downloads-' + DEV);
 const chrome = spawn((process.env.CHROME || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'), ['--headless=new', `--remote-debugging-port=${PORT}`, `--user-data-dir=${join(OUT, 'profile-layout-' + DEV)}`, '--window-size=1400,1100', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-first-run', 'about:blank'], { stdio: 'ignore' });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

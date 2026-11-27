@@ -19,8 +19,8 @@ import { BODY_SAMPLES, CORAL, fovFromDiagonal, makePinhole } from './presence.js
 export const S = 0.1; // scene units (cm) per millimetre: the board is drawn at its real size
 const YAW = (145 * Math.PI) / 180; // direction the board faces (from +x toward +z)
 export const FACING = V(Math.cos(YAW), 0, Math.sin(YAW));
-const UP = V(0, 1, 0);
-const RIGHT = new THREE.Vector3().crossVectors(UP, FACING); // board +x as seen from the front (USB down)
+export const UP = V(0, 1, 0);
+export const RIGHT = new THREE.Vector3().crossVectors(UP, FACING); // board +x as seen from the front (USB down)
 const STAND_TOP = 0.28;
 const ORIGIN = V(9.0, STAND_TOP + 34.77 * S, -4.0); // board millimetre origin (PCB top face centre)
 export const FIGURE_H = 7.0;
@@ -39,7 +39,7 @@ const CAM_RIGHT = new THREE.Vector3().crossVectors(FACING, UP).normalize();
 export const STAGE_IN = V(LENS.x, 0, LENS.z).addScaledVector(FACING, STAGE_DEPTH);
 export const STAGE_OUT = STAGE_IN.clone().addScaledVector(CAM_RIGHT, OUT_LATERAL);
 
-function captionTexture(lines, w = 512, h = 96, bg = '#1b2133') {
+export function captionTexture(lines, w = 512, h = 96, bg = '#1b2133') {
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
@@ -224,6 +224,47 @@ function buildPosableFigure() {
 }
 
 /**
+ * The official board, life size, standing USB-C down on a small clear stand, with its USB-C cable (shared by the
+ * Coral chapters). Built in scene coordinates: the caller moves the assembly's origin for the pop-in.
+ */
+export async function buildBoardOnStand() {
+  const model = await loadBoardModel();
+  const assembly = new THREE.Group(); // board + stand + cable (pop-in as one piece)
+  const board = model.root;
+  board.matrixAutoUpdate = false;
+  board.matrix.makeBasis(RIGHT, UP, FACING).scale(V(S, S, S)).setPosition(ORIGIN);
+  assembly.add(board);
+  const acrylic = new THREE.MeshStandardMaterial({ color: '#dfe9f0', roughness: 0.08, metalness: 0, transparent: true, opacity: 0.35, depthWrite: false });
+  const stand = new THREE.Group(); // local +x = board right, local +z = the direction the board faces
+  stand.position.set(ORIGIN.x, 0, ORIGIN.z);
+  stand.rotation.y = Math.atan2(FACING.x, FACING.z);
+  assembly.add(stand);
+  // the base is two blocks with a gap for the USB-C plug, and a clear back plate the board leans on
+  const standMat = std('#2b3140', 0.6);
+  for (const s of [-1, 1]) box(stand, 1.3, STAND_TOP, 2.2, standMat, s * 1.05, STAND_TOP / 2, -0.25).castShadow = true;
+  const back = box(stand, 3.2, 4.4, 0.14, acrylic, 0, STAND_TOP + 2.2, -0.42);
+  back.userData.noShadow = true;
+  for (const s of [-1, 1]) box(stand, 0.22, 0.9, 0.5, standMat, s * 1.6, STAND_TOP + 0.45, -0.18);
+  // USB-C cable: power for the board
+  const plug = boardToWorld([0, -34.77, -0.7]);
+  const cable = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([plug, plug.clone().add(V(0, -0.15, 0)), V(plug.x + 0.6, 0.12, plug.z - 1.6), V(10.4, 0.1, -6.2), V(11.0, -0.2, -6.9), V(11.6, -1.0, -7.4)]), 60, 0.12, 8, false), std('#2a2d33', 0.55));
+  cable.castShadow = true;
+  assembly.add(cable);
+  return { model, assembly, cable, board, stand };
+}
+/** Moves an assembly built in scene coordinates so its origin sits under the board (its pop-in grows in place). */
+export function centreAssembly(assembly, cable) {
+  const A0 = V(ORIGIN.x, 0, ORIGIN.z);
+  const shift = new THREE.Matrix4().makeTranslation(-A0.x, -A0.y, -A0.z);
+  for (const c of assembly.children) {
+    if (!c.matrixAutoUpdate) c.matrix.premultiply(shift);
+    else if (c === cable) c.geometry.translate(-A0.x, -A0.y, -A0.z);
+    else c.position.sub(A0);
+  }
+  assembly.position.copy(A0);
+}
+
+/**
  * opts (chapter 2; chapter 1 uses the defaults):
  *   posable: a figure with elbows and knees and the 17 keypoint markers (setPose, keypointsWorld, skeleton overlay);
  *   panel: 'camera' (the camera image, rendered continuously) or 'client' (a copy of the official host client
@@ -243,29 +284,8 @@ export async function buildPresenceScene(opts = {}) {
   };
 
   /* ---------------- board (official CAD model) on a stand ---------------- */
-  const model = await loadBoardModel();
-  const assembly = new THREE.Group(); // board + stand + cable (pop-in as one piece)
+  const { model, assembly, cable } = await buildBoardOnStand();
   root.add(assembly);
-  const board = model.root;
-  board.matrixAutoUpdate = false;
-  board.matrix.makeBasis(RIGHT, UP, FACING).scale(V(S, S, S)).setPosition(ORIGIN);
-  assembly.add(board);
-  const acrylic = new THREE.MeshStandardMaterial({ color: '#dfe9f0', roughness: 0.08, metalness: 0, transparent: true, opacity: 0.35, depthWrite: false });
-  const stand = new THREE.Group(); // local +x = board right, local +z = the direction the board faces
-  stand.position.set(ORIGIN.x, 0, ORIGIN.z);
-  stand.rotation.y = Math.atan2(FACING.x, FACING.z);
-  assembly.add(stand);
-  // the base is two blocks with a gap for the USB-C plug, and a clear back plate the board leans on
-  const standMat = std('#2b3140', 0.6);
-  for (const s of [-1, 1]) box(stand, 1.3, STAND_TOP, 2.2, standMat, s * 1.05, STAND_TOP / 2, -0.25).castShadow = true;
-  const back = box(stand, 3.2, 4.4, 0.14, acrylic, 0, STAND_TOP + 2.2, -0.42);
-  back.userData.noShadow = true;
-  for (const s of [-1, 1]) box(stand, 0.22, 0.9, 0.5, standMat, s * 1.6, STAND_TOP + 0.45, -0.18);
-  // USB-C cable: power for the board (the factory demo needs nothing else)
-  const plug = boardToWorld([0, -34.77, -0.7]);
-  const cable = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([plug, plug.clone().add(V(0, -0.15, 0)), V(plug.x + 0.6, 0.12, plug.z - 1.6), V(10.4, 0.1, -6.2), V(11.0, -0.2, -6.9), V(11.6, -1.0, -7.4)]), 60, 0.12, 8, false), std('#2a2d33', 0.55));
-  cable.castShadow = true;
-  assembly.add(cable);
 
   /* ---------------- figure on its path ---------------- */
   const posable = !!opts.posable;
@@ -557,14 +577,7 @@ export async function buildPresenceScene(opts = {}) {
   };
 
   // the assembly was built in scene coordinates: move its origin under the board so its pop-in grows in place
-  const A0 = V(ORIGIN.x, 0, ORIGIN.z);
-  const shift = new THREE.Matrix4().makeTranslation(-A0.x, -A0.y, -A0.z);
-  for (const c of assembly.children) {
-    if (!c.matrixAutoUpdate) c.matrix.premultiply(shift);
-    else if (c === cable) c.geometry.translate(-A0.x, -A0.y, -A0.z);
-    else c.position.sub(A0);
-  }
-  assembly.position.copy(A0);
+  centreAssembly(assembly, cable);
 
   /* ---------------- pop-in ---------------- */
   const pieces = [scalePiece(assembly, 0, 0.9, 1.2), scalePiece(fig.group, 0.5, 0.8, 1.0), scalePiece(panel, 0.8, 0.8, 1.0)];

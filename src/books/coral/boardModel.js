@@ -23,10 +23,11 @@ export const PART_MM = {
   tpu: [3.06, 10.51, 0.75], // Coral Edge TPU under the metal shield
   mcu: [-2.99, -16.22, 1.52], // NXP i.MX RT1176 (Cortex-M7 + Cortex-M4), BGA 14 x 14 mm
   usb: [0, -33.0, -0.5],
+  mic: [10.0, 22.5, 0.5], // PDM microphone: the "mic" bodies of the CAD model (x 8.5..11.5, y 20.5..24.5 mm)
 };
 /** Footprint sizes (mm) for the highlight outlines. */
 export const PART_SIZE_MM = {
-  camera: [8.5, 8.5], ledCam: [1.7, 0.8], ledUser: [0.8, 1.7], ledTpu: [1.62, 0.8], tpu: [15, 10], mcu: [14, 14],
+  camera: [8.5, 8.5], ledCam: [1.7, 0.8], ledUser: [0.8, 1.7], ledTpu: [1.62, 0.8], tpu: [15, 10], mcu: [14, 14], mic: [3, 4], ledStatus: [0.8, 1.6],
 };
 
 const RETOUCH = {

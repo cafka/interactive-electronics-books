@@ -70,6 +70,65 @@ const cascadeSvg = svgWrap(860, 330, `
   <path d="M10 46 H850" stroke="${TEAL}" stroke-width="4" stroke-linecap="round"/>`,
 'The cascade of the multicore model cascade app: the Cortex-M4 runs a small person detection model on 96 by 96 grayscale frames and sets the User LED. When it finds a person it wakes the Cortex-M7, which captures 324 by 324 color frames, sends them to the computer as JPEG and runs the PoseNet model on the Edge TPU, which finds 17 keypoints per person; the M7 decodes them and sends them to the computer. After 5 seconds without a pose the M7 stops and the M4 searches again');
 
+/* Chapter 3: the path of one window in examples/classify_audio, and the book's extension (dashed). */
+const acousticSvg = svgWrap(860, 340, `
+  <defs><marker id="caa" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" refX="11" refY="6" orient="auto"><path d="M0 0 L12 6 L0 12 Z" fill="${INK}"/></marker></defs>
+  <g stroke="${INK}" stroke-width="3" fill="none">
+    <rect x="8" y="62" width="190" height="128" rx="14" fill="#d8e6f2"/>
+    <rect x="228" y="62" width="190" height="128" rx="14" fill="#e6e6e6"/>
+    <rect x="448" y="62" width="190" height="128" rx="14" fill="#e7dcf3"/>
+    <rect x="668" y="62" width="184" height="128" rx="14" fill="#eef0f4"/>
+    <path d="M198 126 H227" marker-end="url(#caa)"/>
+    <path d="M418 126 H447" marker-end="url(#caa)"/>
+    <path d="M638 126 H667" marker-end="url(#caa)"/>
+    <rect x="448" y="236" width="404" height="88" rx="14" fill="#fbeadf" stroke-dasharray="8 6"/>
+    <path d="M760 190 V235" stroke-dasharray="7 6" marker-end="url(#caa)"/>
+  </g>
+  <g fill="${INK}" font-size="20" font-weight="700" text-anchor="middle">
+    <text x="103" y="94">1 · Microphone</text><text x="323" y="94">2 · Features</text><text x="543" y="94">3 · YAMNet</text><text x="760" y="94">4 · Threshold</text>
+  </g>
+  <g fill="${INK}" font-size="16" text-anchor="middle">
+    <text x="103" y="124">PDM, 16 kHz</text><text x="103" y="147">latest 975 ms</text><text x="103" y="170">never stops</text>
+    <text x="323" y="124">on the Cortex-M7</text><text x="323" y="147">96 frames ×</text><text x="323" y="170">64 bands</text>
+    <text x="543" y="124">on the Edge TPU</text><text x="543" y="147">(or the M7)</text><text x="543" y="170">521 class scores</text>
+    <text x="760" y="124">score ≥ 0.3</text><text x="760" y="147">top 5, printed</text><text x="760" y="170">on the console</text>
+  </g>
+  <g fill="${ACCENT}" text-anchor="middle">
+    <text x="650" y="266" font-size="18" font-weight="700">5 · Book extension, not in the example</text>
+    <text x="650" y="292" font-size="16">threshold per class, persistence, cooldown</text>
+    <text x="650" y="314" font-size="16">→ User LED + event log</text>
+  </g>
+  <g fill="${TEAL}" font-size="17" font-weight="700">
+    <text x="12" y="34">Everything runs on the board: no audio leaves it</text>
+  </g>
+  <g fill="${INK}" font-size="15" text-anchor="middle">
+    <text x="214" y="262">Edge TPU build: waits 975 ms,</text><text x="214" y="284">then reads the next window.</text><text x="214" y="306">Audio heard while it computes</text><text x="214" y="328">is in no window.</text>
+  </g>
+  <path d="M10 46 H850" stroke="${TEAL}" stroke-width="4" stroke-linecap="round"/>`,
+'The path of one window in the classify audio example: the PDM microphone records at 16 kilohertz and keeps the latest 975 milliseconds; the Cortex-M7 turns them into 96 frames of 64 bands; YAMNet on the Edge TPU, or on the M7, gives 521 class scores; the classes scoring at least 0.3, at most five, are printed on the console. A dashed fifth box is this book\u2019s extension, not part of the example: a threshold per class, persistence and a cooldown, then the User LED and an event log. The Edge TPU build waits 975 milliseconds between windows, so audio heard while it computes is in no window. Everything runs on the board');
+
+export const CORAL_ACOUSTIC_PAGE = {
+  eyebrow: 'CHAPTER 3  ·  MICROPHONE, YAMNET, ALERTS',
+  title: ['Listening for trouble:', 'acoustic events with local AI'],
+  pageNumber: 5,
+  blocks: [
+    { type: 'p', text: 'The board has a microphone. Its official audio example names what it hears with YAMNet, a model that knows 521 kinds of sound. This chapter turns a few of them into alerts, and counts how often the alerts are wrong.' },
+    { type: 'numbered', items: [
+      'Predict: will clinking dishes set off the glass alert?',
+      'Experiment: play sounds near and far, with a fan or a TV on.',
+      'Understand: follow one 975 ms window to the LED.',
+      'Check: tune the thresholds; count false alarms and misses.',
+    ] },
+    { type: 'h', text: 'THE PATH OF THE SIGNAL' },
+    { type: 'svg', svg: acousticSvg, w: 860, h: 340 },
+    { type: 'cards', items: [
+      { head: 'OFFICIAL EXAMPLE', tone: 'teal', body: 'classify_audio: microphone, features and YAMNet on the board. It prints the classes scoring 0.3 or more.' },
+      { head: 'BOOK EXTENSION', tone: 'red', body: 'Alert rules, the User LED and an event log. Written for this book, not part of coralmicro.' },
+    ] },
+    { type: 'p', text: 'A demonstration, not a security system: how reliably it hears breaking glass has not been measured.' },
+  ],
+};
+
 export const CORAL_CASCADE_PAGE = {
   eyebrow: 'CHAPTER 2  ·  TWO CORES, TWO MODELS',
   title: ['Wake up the AI:', 'Intelligent pose detection'],

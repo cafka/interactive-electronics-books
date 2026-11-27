@@ -171,6 +171,43 @@ python3 python/traffic_light.py
   - `tests/browser/cdp-layout.mjs` for Coral, chapters 1 and 2, passed 44 of 44 checks at 390 px and 30 of 30 on desktop. The chapter 2 guide PDF downloaded valid: 9 pages, with the 3D picture and the diagram.
   - **Not done:** nothing was compiled, flashed or run on a real Dev Board Micro, and the commands were not run.
 
+## Coral Dev Board Micro, chapter 3: Listening for trouble: acoustic events with local AI
+
+- Based on the official example **`examples/classify_audio`** of `google-coral/coralmicro`. Before the chapter was written, these were read: `classify_audio.cc`, its `CMakeLists.txt`, `libs/tensorflow/audio_models.h` / `.cc`, `libs/tensorflow/classification.h` / `.cc`, `libs/audio/audio_driver.h`, `libs/audio/audio_service.h`, and the YAMNet class map (`tensorflow/models`, `research/audioset/yamnet/yamnet_class_map.csv`).
+- **What the source does** (and what the chapter teaches):
+  - The on-board **PDM microphone** is read through DMA at 16 kHz (the driver also offers 48 kHz), 2 buffers of 50 ms, the first 150 ms dropped. `LatestSamples` keeps the latest 975 ms; the microphone never stops.
+  - The program is built for the **Cortex-M7** only (`add_executable_m7`). The M7 computes the features with the TensorFlow Lite Micro audio frontend: 15 600 samples → 96 frames × 64 bands (25 ms frames, 10 ms step, 125–7500 Hz).
+  - **YAMNet runs on the Edge TPU** by default (`yamnet_spectra_in_edgetpu.tflite`; resolver: Quantize, Dequantize, Edge TPU operator). With `set(YAMNET_CPU true)` in `CMakeLists.txt` it runs on the M7 (`yamnet_spectra_in.tflite`, 9 TFLM operators). So an audio model on the Edge TPU is supported here because coralmicro ships this compiled model; the features themselves are not part of the model.
+  - `GetClassificationResults(interpreter, 0.3, 5)` and `FormatClassificationOutput` print "Results:" and "id: score" lines, or "No results". Only the Status LED is used. The example does nothing else with the results.
+  - The Edge TPU build waits 975 ms after each window ("rate limit"). Because the microphone keeps recording, the next window is the audio of that wait, and **the audio heard while the board computes is in no window**. The CPU build reads again at once (windows overlap).
+- **Discrepancies and doubts found in the source**, stated on the page:
+  - The source comment says `flashtool.py -e yamnet`; the project folder is `classify_audio`, so the page uses `python3 scripts/flashtool.py -e classify_audio`.
+  - The test file `/models/yamnet_test_audio.bin` is copied into the input tensor, but `run()` then fills that tensor from `audio_input`, still all zeros at that point. Reading of the source only, not checked on a board.
+- **Not in the official material, so built as a clearly labelled teaching extension** (page, code tab and console all say "extension, not part of coralmicro"): a threshold per alert class, persistence (k of n windows), a cooldown, the User LED for 2 s after an alert, and an event log. Its C++ (`CheckAlerts()`) uses the coralmicro API (`GetClassificationResults`, `TimerMillis`, `LedSet`) but **was not compiled**.
+- **Simulated:**
+  - The sounds are synthesised (two claps, knocks, glass breaking, a smoke alarm; and look-alikes: door slam, dishes, microwave beeps, speech, music), with three rooms (quiet, fan, TV) and two distances (1 m and 4 m; weaker, no echo).
+  - The features are computed for real in the page with the example's settings. They are close to, not equal to, the TFLM frontend's numbers.
+  - The classifier is a small hand-written scorer on a few measurements (loudness, length, attack, bursts, frequency balance, tonality, steadiness). **It is not YAMNet**, its scores are not YAMNet scores, and nothing here says how well YAMNet or a board would do. The printed class ids are real YAMNet ids.
+  - The time the board needs per window is an assumption (default 250 ms, slider 100–900 ms); the board prints its real "total".
+- **Notebook:**
+  - *Simulate*: Status LED, User LED (extension), the state of the microphone, the M7 and the Edge TPU, a timeline of the last 8 s (sounds, windows, audio in no window). Four steps: predict (do clinking dishes set off the glass alert?); experiment (9 sounds, distance, room, the spectrogram and the scores of each window, what the example prints); understand (parts, the five stages, Edge TPU / CPU build, the exercise without the wait, the assumed computing time); check (rules per class, event log with correct / false alarm / missed and the reason, a test bench and a threshold sweep, a quiz on why this is not a security system).
+  - *C++*: the official example shortened with `// ...`, the extension, what the code does, the YAMNet ids each alert reads, materials, environment, get the code, build, flash, run and see the results, the CPU build, 6 exercises, troubleshooting.
+  - *How it works*: checked facts, whether an audio model can run on the Edge TPU, real against simulated, "What it cannot do: this is not a security system", sources.
+- **Test bench results** (this page's synthetic sounds and stand-in only; 54 cases, 24 that should raise an alert; windows back to back):
+  - Default rules (threshold 0.5, alarm 2 of 3 windows, cooldowns 2–6 s): 21 found, 5 false alarms, 3 missed. False alarms: dishes → glass (fan 1 m, TV 1 m), door slam → knock (TV 1 m and 4 m), speech → knock (quiet 1 m). Missed: clap, knock and glass at 4 m with the fan.
+  - One threshold for all classes: 0.2 → 23 found / 18 false alarms / 1 missed; 0.3 → 22 / 11 / 2; 0.4 → 22 / 7 / 2; 0.5 → 21 / 5 / 3; 0.6 → 20 / 1 / 4; 0.7 → 16 / 0 / 8; 0.8 → 13 / 0 / 11. No threshold gives zero of both.
+- **Limits:** a demonstration, not a security system. Nobody measured how reliably YAMNet on this board hears breaking glass, knocks or alarms, or how often it raises false alarms. Not a replacement for a certified smoke or fire alarm.
+- **URL:** `?book=coral&open=1&lesson=3`.
+- **Files:** `src/books/coral/chapter3.js`, `acoustic.js` (pure logic: facts, sounds, features, stand-in classifier, alert rules, monitor, bench), `acousticScene.js` (scene). `presenceScene.js` now exports `buildBoardOnStand()` and `centreAssembly()`, shared with chapters 1 and 2; `boardModel.js` gained the microphone position (the CAD model's `mic` part). Left page in `pageContent.js`. Tests: `tests/coralAcoustic.test.mjs`, `tests/browser/cdp-acoustic.mjs`; `cdp-layout.mjs` now includes Coral chapter 3.
+- **Checks that ran without hardware** (27 Nov 2026, headless Chrome with software WebGL, one run at a time):
+  - `node --test tests/coralAcoustic.test.mjs`: 14 of 14 pass. It covers the facts against the source, the YAMNet ids, the 96 × 64 features, the deterministic sounds, the console format, the bench numbers the page quotes, the threshold trade-off, the alert rules, the board loop timing, a short sound lost between windows on the Edge TPU build and found without the wait or on the CPU build, the User LED on for 2 s after an alert, and the official strings in the chapter (no User LED in the official listing).
+  - `npm test`: 126 tests, 125 pass, 0 fail, 1 skipped (the Python comparison, when Python 3 is not installed).
+  - `tests/browser/cdp-acoustic.mjs` (start-up, silence, a knock alert logged as correct, the `[extension]` console line, score bars, the smoke alarm with persistence, CPU build, the exercise without the wait, 900 ms per window, threshold sweep and bench with the numbers the page quotes, part selection, both code listings, the guide sections, page errors): 21 of 21 on desktop and 21 of 21 at 390 px. The first desktop run failed one check (the Simulate tab 2 px wider than the notebook). The cause, measured in the page: the five-column pipeline and the spectrogram + scores row did not fit the desktop notebook's width. `.pipe.five` now uses three columns and `.spec-view` wraps the scores under the spectrogram when there is no room; after that the tab measured 366 px of 366, and both runs passed.
+  - The layout suite below ran before that CSS fix (it only touches chapter 3's `.pipe.five`, `.spec-view` and `.score-row.wide`); it was not run again afterwards.
+  - `tests/browser/cdp-layout.mjs … coral pdf` (Coral chapters 1, 2 and 3): 66 of 66 at 390 px and 45 of 45 on desktop. Chapters 1 and 2 show no regression after the shared stand was moved into `buildBoardOnStand()`. The guide PDFs downloaded valid: chapter 1 4 pages, chapter 2 9 pages, chapter 3 9 pages, each with 2 pictures and a valid cross-reference table.
+  - `tests/browser/pdf-open.mjs`: the three PDFs downloaded at 390 px open in Chrome's PDF viewer as `application/pdf`; the chapter 3 screenshot was checked (9 pages, cover, objective, materials, the signal path).
+  - **Not done:** nothing was compiled, flashed or run on a real board, the commands were not run, the extension's C++ was not compiled, and no real sound was recorded.
+
 ## Adding a book
 
 Create `src/books/<id>/index.js` with `{ id, name, board, title, blurb, eyebrow, coverColor, lessons, paintCover, coverTexture, canvasLabel }` and add it to `src/books/index.js`. A chapter may set `codeTab` (the code tab label, default `Python`). A book is built the first time it is chosen.
@@ -213,13 +250,15 @@ Branch `backup/engine-ux-wip` contains everything on `main` plus the ESP32 chapt
 
 1. `git fetch origin && git checkout backup/engine-ux-wip`
 2. Requirements: Node.js 18+ and Chrome. There is no `npm install` and no build step. three.js is vendored in `vendor/`. The Coral model is committed as `.bin` + `.json` (`.gitattributes` marks it binary).
-3. `npm test` should give 112 tests: 111 pass and 1 is skipped when Python 3 is not installed (the `traffic_light.py` comparison).
-4. `npm start`, then open <http://127.0.0.1:5173/>. Useful URLs: `?book=raspberry-pi&open=1&lesson=1`, `?book=esp32&open=1&lesson=2`, `?book=coral&open=1&lesson=1`.
+3. `npm test` should give 126 tests: 125 pass and 1 is skipped when Python 3 is not installed (the `traffic_light.py` comparison).
+4. `npm start`, then open <http://127.0.0.1:5173/>. Useful URLs: `?book=raspberry-pi&open=1&lesson=1`, `?book=esp32&open=1&lesson=2`, `?book=coral&open=1&lesson=1`, `?book=coral&open=1&lesson=3`.
 5. To merge: open a pull request from `backup/engine-ux-wip` into `main` and run the manual checks below on real devices first.
 
 Test hooks for automated browsers are on `window.book3d`: `layout()` (free area, content box, layout mode, insets), `tab` / `setTab(name)` (phones), `viewName`, `labelsShown`, `selectedLabel`, `setExpanded(bool)`, `expanded`, `guide()` (returns `{ html, fileName }`), `downloadGuide()`, `lastGuide`, `project(x, y, z)`, `snapRig()`, `debugPointer`.
 
 ### Pending tests and known issues
+
+**Latest unit tests (27 Nov 2026, with Coral chapter 3):** `npm test`, 126 tests, 125 pass, 0 fail, 1 skipped. Coral browser results are in the chapter sections above. The full `run-all.ps1` suite below was not run again for chapter 3.
 
 **Final results (26 Nov 2026):**
 

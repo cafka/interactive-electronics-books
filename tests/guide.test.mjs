@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { classifyHeading, pageSections, GUIDE_SECTIONS, guideFileName } from '../src/guide.js';
 import { PAGE_CONTENT } from '../src/pageContent.js';
 import { ESP32_DOOR_PAGE, ESP32_PLANT_PAGE, ESP32_FEEDER_PAGE } from '../src/books/esp32/pageContent.js';
-import { CORAL_PRESENCE_PAGE } from '../src/books/coral/pageContent.js';
+import { CORAL_PRESENCE_PAGE, CORAL_CASCADE_PAGE, CORAL_ACOUSTIC_PAGE } from '../src/books/coral/pageContent.js';
 
-const PAGES = { ...PAGE_CONTENT, ESP32_DOOR_PAGE, ESP32_PLANT_PAGE, ESP32_FEEDER_PAGE, CORAL_PRESENCE_PAGE };
+const PAGES = { ...PAGE_CONTENT, ESP32_DOOR_PAGE, ESP32_PLANT_PAGE, ESP32_FEEDER_PAGE, CORAL_PRESENCE_PAGE, CORAL_CASCADE_PAGE, CORAL_ACOUSTIC_PAGE };
 
 test('the headings the chapters use land in the right section of the guide', () => {
   const cases = {
