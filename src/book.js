@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { coverTexture, pageEdgeTexture } from './textures.js';
+import { createPageMaterial } from './pageMaterial.js';
 
 export const PW = 11, PD = 14, PT = 0.9, CT = 0.18;
 const LEAF_Y = 0.03; // above the page plane and the ribbon, so nothing intersects the turning leaf
@@ -39,7 +40,7 @@ export function buildBook(initialPages) {
     return m;
   };
   const pagePlane = (tex, x, parent) => {
-    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85 });
+    const mat = createPageMaterial({ map: tex });
     const m = new THREE.Mesh(new THREE.PlaneGeometry(PW, PD), mat);
     m.rotation.x = -Math.PI / 2;
     m.position.set(x, 0.003, 0);
@@ -88,8 +89,8 @@ export function buildBook(initialPages) {
   };
   const frontGeo = sheetGeo(false);
   const backGeo = sheetGeo(true);
-  const frontMat = new THREE.MeshStandardMaterial({ roughness: 0.85, side: THREE.FrontSide, shadowSide: THREE.DoubleSide });
-  const backMat = new THREE.MeshStandardMaterial({ roughness: 0.85, side: THREE.BackSide });
+  const frontMat = createPageMaterial({ side: THREE.FrontSide, shadowSide: THREE.DoubleSide });
+  const backMat = createPageMaterial({ side: THREE.BackSide });
   const leaf = new THREE.Group();
   const front = new THREE.Mesh(frontGeo, frontMat);
   const back = new THREE.Mesh(backGeo, backMat);

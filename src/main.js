@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { buildBook } from './book.js';
+import { calibratePaper, paperSettings } from './pageMaterial.js';
 import { BOOKS, DEFAULT_BOOK, getBook } from './books/index.js';
 import { createShell } from './ui.js';
 import { buildReader } from './pageContent.js';
@@ -87,6 +88,8 @@ desk.rotation.x = -Math.PI / 2;
 desk.position.y = -PT - CT - 0.01;
 desk.receiveShadow = true;
 scene.add(desk);
+// the printed pages show their own colours at full light (src/pageMaterial.js): tell them what "full light" is
+calibratePaper(scene);
 
 /* ------------------------------------------------------------------ books and lessons */
 // shared by every lesson's notebook. Labels start hidden: the reader sees the project first, and clicks a part
@@ -1556,6 +1559,8 @@ window.book3d = {
   get labelsShown() { return options.labels; },
   get selectedLabel() { return selectedLabel?.title ?? null; },
   get viewName() { return currentViewName; },
+  /** Test helper: the page material's calibration and settings (src/pageMaterial.js). */
+  paper: paperSettings,
   /** Test helper: the free area for the book and the layout in use. */
   layout: () => ({ area: freeArea(), content: contentScreenBox(), measured: contentBoxes.has(runtimes[current]), sheet: isNarrow(), compactSide: isCompactSide(), panelW: panelW(), tabbed, rail, insets: insets(), camCompact: camBar.classList.contains('compact') }),
   /** Tabbed layout: the view shown ('book' | 'experiment' | 'notebook') and a way to switch it. */
