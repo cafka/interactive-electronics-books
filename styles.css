@@ -161,12 +161,23 @@ kbd { border: 1px solid rgba(43,39,64,0.25); border-bottom-width: 2px; }
 .budget.off .seg { filter: grayscale(0.9); opacity: 0.55; }
 .note { font-size: 12.5px; color: var(--ink-soft); font-style: italic; }
 
+/* serial console (createConsole in src/ui.js): a box of --console-lines lines that scrolls through a long history */
 .console {
+  --console-lines: var(--console-visible, 5); /* --console-visible: set by createConsole() */
   font-family: var(--mono); font-size: 12px; line-height: 1.55; background: #14182c; color: #cfd8ee;
-  border-radius: 10px; padding: 10px 12px; min-height: 96px; max-height: 120px; overflow: hidden;
-  display: flex; flex-direction: column; justify-content: flex-end;
+  border-radius: 10px; padding: 10px 12px; min-height: 96px;
+  max-height: calc(var(--console-lines) * 1.55em + 20px); overflow-y: auto; overscroll-behavior: contain;
+  position: relative; scrollbar-width: thin; scrollbar-color: #4a5275 transparent;
 }
-.console .l { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: fade 0.3s; }
+.console:focus-visible { outline: 2px solid #7fd1c7; outline-offset: 2px; }
+.console .l { white-space: pre-wrap; overflow-wrap: anywhere; animation: fade 0.3s; }
+.console .l + .l { margin-top: 1px; }
+.console-new {
+  position: sticky; bottom: 0; display: block; margin: 4px 0 0 auto; padding: 3px 10px; cursor: pointer;
+  font: 700 11.5px var(--sans); color: #14182c; background: #7fd1c7; border: 0; border-radius: 999px;
+}
+.console-new[hidden] { display: none; }
+body.nb-expanded #panel .console { --console-lines: 18; font-size: 13.5px; }
 .console .p { color: #7fd1c7; }
 .console .c { color: #8c93b3; }
 

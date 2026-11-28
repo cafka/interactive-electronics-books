@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { CASCADE, KEYPOINTS, EDGES, CascadeSim, standInPose, drawnEdges, M4_STAGES, M7_STAGES } from '../src/books/coral/cascade.js';
+import { CASCADE, KEYPOINTS, EDGES, CascadeSim, standInPose, drawnEdges, M4_STAGES, M7_STAGES, HANDOFF_MS } from '../src/books/coral/cascade.js';
 
 // a person: all 17 keypoints inside the frame; nobody: all outside
 const inFrame = () => KEYPOINTS.map((_, i) => ({ x: -0.3 + (i % 5) * 0.12, y: 0.6 - i * 0.07, depth: 4 }));
@@ -79,9 +79,12 @@ test('power on: both cores start as the source says; the M4 searches with the St
 test('a person: the M4 sets the User LED, disables the camera and hands over; the M7 starts', () => {
   const w = world();
   const sim = new CascadeSim(w.measure);
-  run(sim, 1200);
+  // stage times are presentation times (src/presentation.js): wait in M4 cycles, not in fixed milliseconds
+  const m4Cycle = M4_STAGES.reduce((s, x) => s + x.ms, 0);
+  run(sim, 1.5 * m4Cycle);
   w.person = true;
-  run(sim, 1200);
+  // at most one cycle until the next frame, one cycle to decide, then the hand-over
+  run(sim, 2 * m4Cycle + HANDOFF_MS + 100);
   const t = texts(sim);
   const i = t.indexOf('Person detected, let M7 take over.');
   assert.ok(i > 0);

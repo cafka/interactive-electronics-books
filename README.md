@@ -49,6 +49,20 @@ Opening `index.html` directly with `file://` will not work because ES modules ne
   - The page text is sampled with a small negative LOD bias plus anisotropic filtering, so it stays sharp when the page is small on screen.
   - Before, the pages used a lit `MeshStandardMaterial` followed by ACES tone mapping: the paper looked grey (`[233,231,227]` instead of `[247,239,221]`) and the inks were washed out.
   - Measured in headless Chrome on Coral chapters 1 and 3 and Raspberry Pi chapter 1 (desktop, left page view): the paper colour now matches Read page within 1 unit, and ink contrast and edge sharpness are higher than before. `tests/pageMaterial.test.mjs` checks the calibration and the shader changes.
+- **Presentation timing** (`src/presentation.js`): one place for how fast the page shows a simulation. These are not hardware times: the timers of the official sources stay in each chapter's logic.
+  - Processing stages are shown 1.6 times slower (`stageScale`, used by Coral chapter 2).
+  - The figure walks at 0.22 of its path per second.
+  - A pose change takes 1.1 s with a smooth start and stop; "Keep changing pose" holds each pose 3.6 s.
+  - Console lines appear at least 220 ms apart.
+- **Serial console** (`createConsole()` in `src/ui.js`, every chapter): a scrollable box with a history of at least 200 lines. Long lines wrap instead of being cut. Lines appear one by one, and a burst is caught up faster. While you read earlier lines, the box stays put and a "↓ N new lines" button jumps back to the end. In the expanded notebook it shows 18 lines.
+- **Cursor over the book** (`src/main.js`): decided in one place from the state:
+  - `grabbing` while dragging, or `move` in the left page view;
+  - `pointer` on a part, a 3D control or a page corner;
+  - `help` on a label;
+  - otherwise `grab`.
+
+  The hover is checked again several times a second for a still mouse, and it is cleared when the pointer leaves the canvas, the window loses focus or a drag ends.
+- **Coral chapter 2, host client window:** the picture of a frame is taken when the M7 captures it and shown, with that frame's pose, when the cycle ends. So the drawing always belongs to the image under it. The client's 0.5 s "no pose" timer is checked when a frame arrives. One page cycle (1.15 s) is longer than 0.5 s, and checking the timer every frame made the drawing blink between two valid poses.
 - **Read page** (notebook header): shows the left page as selectable HTML at full size, with the simulation stopped. **Back to the book** (or Esc) returns to the same chapter and camera. The text and schematics come from `src/pageContent.js`, the same source that paints the 3D page.
 - Turning a page (or reading) stops the current chapter's program and electrical animations, folds the 3D circuit away, turns the page leaf, then builds the new chapter's circuit and swaps the notebook (simulation, code, explanations).
 - On narrow tablet screens the notebook is a bottom sheet that scrolls as a whole (the tabs stay pinned).

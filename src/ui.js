@@ -1,4 +1,5 @@
 /* Shared notebook UI: shell (header, pager, tabs) and small widgets used by every lesson. */
+import { PRESENTATION } from './presentation.js';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -80,13 +81,70 @@ export function bindCopy(button, getText, codeEl) {
   });
 }
 
-export function createConsole(el, max = 5) {
-  return (text, cls = '') => {
+/**
+ * Simulated serial console, shared by every chapter. Returns log(text, cls).
+ *   visible: lines shown at once (the box scrolls; the history keeps far more, so earlier lines can be read again).
+ *   Lines appear one at a time, at least PRESENTATION.consoleLineMs apart; a burst is caught up faster so the
+ *   console never lags far behind the simulation. Long lines wrap instead of being cut.
+ *   The box follows new lines only while the reader is at the bottom; scrolled up, it stays put and a button
+ *   shows how many lines are new.
+ */
+export function createConsole(el, visible = 5) {
+  const HISTORY = Math.max(200, visible * 20);
+  el.style.setProperty('--console-visible', String(Math.max(4, visible)));
+  el.setAttribute('tabindex', '0');
+  el.setAttribute('role', 'log');
+  const jump = document.createElement('button');
+  jump.type = 'button';
+  jump.className = 'console-new';
+  jump.hidden = true;
+  const atBottom = () => el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+  let unseen = 0;
+  const toBottom = () => {
+    el.scrollTop = el.scrollHeight;
+    unseen = 0;
+    jump.hidden = true;
+  };
+  jump.addEventListener('click', toBottom);
+  el.addEventListener('scroll', () => atBottom() && unseen && toBottom());
+  const queue = [];
+  let timer = null, lastAt = -1e9;
+  const append = ([text, cls]) => {
+    lastAt = performance.now();
+    const follow = atBottom();
     const d = document.createElement('div');
     d.className = `l ${cls}`;
     d.textContent = text;
-    el.appendChild(d);
-    while (el.children.length > max) el.firstChild.remove();
+    el.insertBefore(d, jump.isConnected ? jump : null);
+    let n = el.childElementCount - (jump.isConnected ? 1 : 0);
+    while (n-- > HISTORY) el.firstElementChild.remove();
+    if (follow) toBottom();
+    else {
+      unseen++;
+      jump.textContent = `↓ ${unseen} new line${unseen === 1 ? '' : 's'}`;
+      jump.hidden = false;
+      if (!jump.isConnected) el.appendChild(jump);
+    }
+  };
+  const flush = () => {
+    timer = null;
+    if (!el.isConnected) {
+      queue.length = 0; // the notebook was rebuilt: this console is gone
+      return;
+    }
+    if (!queue.length) return;
+    // a long burst (a fast simulation, a test at high speed) is shown in bigger steps
+    const batch = queue.length > 120 ? queue.length - 20 : queue.length > 30 ? 4 : 1;
+    for (let i = 0; i < batch && queue.length; i++) append(queue.shift());
+    if (queue.length) timer = setTimeout(flush, queue.length > 12 ? PRESENTATION.consoleLineMs / 3 : PRESENTATION.consoleLineMs);
+  };
+  return (text, cls = '') => {
+    queue.push([String(text), cls]);
+    if (timer) return;
+    // a line after a quiet moment appears at once; otherwise it waits its turn
+    const wait = PRESENTATION.consoleLineMs - (performance.now() - lastAt);
+    if (wait <= 0) flush();
+    else timer = setTimeout(flush, wait);
   };
 }
 

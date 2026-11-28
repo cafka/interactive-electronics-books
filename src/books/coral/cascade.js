@@ -15,6 +15,7 @@
  * Stage durations are chosen for the page, not measured; the 5 s and 1 s timers are the app's own.
  */
 import { detectorScores, personDetected, lightFactor } from './presence.js';
+import { presentMs } from '../../presentation.js';
 
 /** Facts from the app's source and README, used by the page and the tests. */
 export const CASCADE = {
@@ -46,7 +47,10 @@ export const CASCADE = {
     requirements: 'Pillow>=9.0.0',
     defaultHost: '10.10.10.1',
     keypointThreshold: 0.2, // update_poses(threshold=0.2): keypoints and edges below it are not drawn
-    clearAfterS: 0.5, // the drawing is cleared when no pose arrives for 0.5 s
+    // The client clears the drawing when no pose arrives for 0.5 s. On a board, poses arrive many times in 0.5 s;
+    // on the page one cycle takes M7_CYCLE_MS (more than 0.5 s), so the page checks this timer only when a frame
+    // arrives (at the end of each cycle). Between two frames that both have a pose, the drawing stays.
+    clearAfterS: 0.5,
     waitingText: 'Waiting for Person Detection',
     waitingDelayS: 2, // the waiting text appears 2 s after the board reports low power
   },
@@ -110,19 +114,23 @@ export const drawnEdges = (found) => EDGES.filter(([a, b]) => found[a] && found[
  *     JSON when there is at least one. Main checks once a second; after 5 s without a pose it stops the camera and
  *     sends an IPC message back to the M4.
  */
+// Base page times, scaled by PRESENTATION.stageScale (src/presentation.js) so each step can be followed.
+// The app's own timers (5 s without a pose, a check every 1 s) are hardware times and are not scaled.
 export const M4_STAGES = [
-  { id: 'm4capture', ms: 140 },
-  { id: 'm4infer', ms: 260 },
-  { id: 'm4decide', ms: 100 },
+  { id: 'm4capture', ms: presentMs(140) },
+  { id: 'm4infer', ms: presentMs(260) },
+  { id: 'm4decide', ms: presentMs(100) },
 ];
 export const M7_STAGES = [
-  { id: 'm7capture', ms: 140 },
-  { id: 'm7jpeg', ms: 120 },
-  { id: 'tpu', ms: 220 },
-  { id: 'decode', ms: 120 },
-  { id: 'send', ms: 120 },
+  { id: 'm7capture', ms: presentMs(140) },
+  { id: 'm7jpeg', ms: presentMs(120) },
+  { id: 'tpu', ms: presentMs(220) },
+  { id: 'decode', ms: presentMs(120) },
+  { id: 'send', ms: presentMs(120) },
 ];
-export const HANDOFF_MS = 360; // shown as one step: camera disabled, IPC message, the other core resumes
+export const HANDOFF_MS = presentMs(360); // shown as one step: camera disabled, IPC message, the other core resumes
+/** One M7 cycle on the page (capture to pose sent). A real board runs many cycles a second. */
+export const M7_CYCLE_MS = M7_STAGES.reduce((s, x) => s + x.ms, 0);
 
 export class CascadeSim {
   /**
@@ -181,6 +189,8 @@ export class CascadeSim {
   }
   capture() {
     this.frame = this.measure();
+    // the M7's camera frame: the page takes its picture now, so the image and the keypoints are of the same moment
+    if (this.core === 'm7') this.events.push({ type: 'capture', t: this.timeMs });
   }
   step(dtMs) {
     if (!this.powered) return;
@@ -245,6 +255,9 @@ export class CascadeSim {
       // the event carries its own frame: by the time it is read, the next frame may already be captured
       this.events.push({ type: 'pose', t: this.timeMs, count: this.pose.count, keypoints: this.frame.keypoints, found: [...this.pose.found] });
     }
+    // end of the cycle: the client has this frame's image and, if there was one, its pose. The page shows both
+    // together (presentation), so the drawing always belongs to the image under it.
+    if (id === 'send') this.events.push({ type: 'cycle', t: this.timeMs, reported: this.pose.reported, keypoints: this.frame.keypoints, found: [...this.pose.found] });
   }
   startM7() {
     this.core = 'm7';

@@ -5,6 +5,7 @@ import { CORAL_CASCADE_PAGE } from './pageContent.js';
 import { CORAL, visibleShare, personDetected } from './presence.js';
 import { CASCADE, KEYPOINTS, EDGES, CASCADE_SOURCES, CascadeSim, M4_STAGES, M7_STAGES, drawnEdges } from './cascade.js';
 import { $, $$, escapeHtml, renderCode, bindCopy, createConsole, renderSteps } from '../../ui.js';
+import { PRESENTATION } from '../../presentation.js';
 
 /*
  * Coral book, chapter 2: "Wake up the AI: Intelligent pose detection".
@@ -18,7 +19,6 @@ import { $, $$, escapeHtml, renderCode, bindCopy, createConsole, renderSteps } f
 
 const viewButtons = [['circuit', 'Whole project'], ['stage', 'Board + person'], ['leftpage', 'Left page'], ['board', 'Board'], ['camside', 'Camera side'], ['panel', 'Host client']];
 const esc = (s) => escapeHtml(String(s));
-const WALK_SPEED = 0.36;
 const AMBER = '#ffb347', VIOLET = '#c58cff';
 
 /** Poses the figure can take (radians, see REST_POSE). */
@@ -900,13 +900,24 @@ export default {
     function clientStep(nowS) {
       while (eventsSeen < sim.events.length) {
         const ev = sim.events[eventsSeen++];
+        // Presentation: a frame's picture is taken when the M7 captures it ('capture') and shown, with that frame's
+        // pose, when the cycle ends ('cycle'). On the board the JPEG and the pose JSON arrive a few milliseconds
+        // apart; on the slowed-down page they would be most of a second apart, and the drawing would belong to the
+        // previous image.
         if (ev.type === 'frame') {
-          client.frames++;
-          scene.clientFrame();
+          client.frames++; // the JPEG left the board
+        } else if (ev.type === 'capture') {
+          scene.clientCapture();
+        } else if (ev.type === 'cycle') {
+          scene.clientShow();
           if (client.mode !== 'waiting' || !sim.lowPower) client.mode = 'image';
-        } else if (ev.type === 'pose') {
-          client.points = clientPoints(ev, ev.found);
-          client.lastPoseAt = nowS;
+          if (ev.reported) {
+            client.points = clientPoints(ev, ev.found);
+            client.lastPoseAt = nowS;
+          } else if (client.points && nowS - client.lastPoseAt > CASCADE.client.clearAfterS) {
+            // a frame without a pose, and none for 0.5 s: the drawing is cleared (write_data([]))
+            client.points = null;
+          }
         } else if (ev.type === 'handoff') {
           if (ev.to === 'm7') {
             sawM7 = true;
@@ -921,8 +932,10 @@ export default {
         client.mode = 'waiting';
         client.lowPowerSince = null;
       }
-      // no pose for 0.5 s: the drawing is cleared (write_data([]))
-      if (client.points && nowS - client.lastPoseAt > CASCADE.client.clearAfterS) client.points = null;
+      // while the M7 runs, the 0.5 s timer is checked when a frame arrives (above): one page cycle is longer than
+      // 0.5 s, and checking it every frame made the drawing blink between two valid poses. Once the M7 has stopped,
+      // no frame arrives any more and the timer runs on its own.
+      if (sim.core !== 'm7' && client.points && nowS - client.lastPoseAt > CASCADE.client.clearAfterS) client.points = null;
       scene.setClient({ mode: client.mode, points: client.points, edges: EDGES });
     }
 
@@ -954,7 +967,7 @@ export default {
         if (running && !paused) {
           simClockS += sdt;
           if (targetU != null) {
-            const d = targetU - scene.u, stepU = WALK_SPEED * sdt;
+            const d = targetU - scene.u, stepU = PRESENTATION.walkSpeed * sdt;
             if (Math.abs(d) <= stepU) {
               scene.setU(targetU, true);
               targetU = null;
@@ -963,7 +976,7 @@ export default {
           }
           if (cycling) {
             cycleT += sdt;
-            if (cycleT > 2.4) {
+            if (cycleT > PRESENTATION.poseHoldS) {
               cycleT = 0;
               setPose(POSE_ORDER[(POSE_ORDER.indexOf(poseId) + 1) % POSE_ORDER.length]);
             }

@@ -4,6 +4,7 @@ import { scalePiece } from '../../popin.js';
 import { glowTexture } from '../../textures.js';
 import { loadBoardModel, PART_MM, PART_SIZE_MM } from './boardModel.js';
 import { BODY_SAMPLES, CORAL, fovFromDiagonal, makePinhole } from './presence.js';
+import { PRESENTATION, easeInOut } from '../../presentation.js';
 
 /*
  * Coral chapter 1 scene, on the right page (x 0..11, z -7..7, centimetres).
@@ -293,6 +294,8 @@ export async function buildPresenceScene(opts = {}) {
   const fig = posable ? buildPosableFigure() : buildFigure();
   root.add(fig.group);
   const poseGoal = { ...REST_POSE };
+  const poseFrom = { ...REST_POSE }; // where the current pose transition started
+  let poseT = 1; // progress of that transition (0..1)
   let u = 0; // 0 = outside the frame (start), 1 = centre of the frame
   let walkPhase = 0;
   let poseKey = ''; // changes when the posable figure moves its arms or legs (the camera image is taken again)
@@ -496,8 +499,11 @@ export async function buildPresenceScene(opts = {}) {
   img.frustumCulled = false;
   panelTilt.add(img);
   // host client mode: the window shows only what the board sends (frames and poses while the M7 runs)
-  const rtClient = clientPanel ? new THREE.WebGLRenderTarget(RT, RT, { samples: 0 }) : null;
-  let clientFrameWanted = false, clientHasImage = false;
+  // two images: the one shown, and the next one, taken when the board captures its frame and shown only when that
+  // frame's result arrives (clientCapture / clientShow), so the drawing always belongs to the image under it
+  let rtClient = clientPanel ? new THREE.WebGLRenderTarget(RT, RT, { samples: 0 }) : null;
+  let rtClientNext = clientPanel ? new THREE.WebGLRenderTarget(RT, RT, { samples: 0 }) : null;
+  let clientFrameWanted = false, clientShowWanted = false, clientNextReady = false, clientHasImage = false;
   const clientCanvas = clientPanel ? document.createElement('canvas') : null;
   let clientTex = null, waitMesh = null, blackMesh = null;
   if (clientPanel) {
@@ -527,6 +533,18 @@ export async function buildPresenceScene(opts = {}) {
   panelAnchor.position.set(0, PW + 1.0, 0);
   panelTilt.add(panelAnchor);
 
+  /** The kept image becomes the one shown (the drawing for it is set in the same frame by setClient). */
+  function showClientNext() {
+    clientShowWanted = false;
+    if (!clientNextReady) return;
+    [rtClient, rtClientNext] = [rtClientNext, rtClient];
+    imgMat.map = rtClient.texture;
+    clientNextReady = false;
+    clientHasImage = true;
+    blackMesh.visible = clientMode === 'black';
+  }
+  let clientMode = 'black', clientKey = '';
+
   const prevClear = new THREE.Color();
   let shotKey = '';
   img.onBeforeRender = (renderer, scene) => {
@@ -536,6 +554,7 @@ export async function buildPresenceScene(opts = {}) {
     // about 15 times a second, plus one refresh a second; a still scene gives the same image
     const key = `${u.toFixed(4)}|${walkPhase.toFixed(2)}|${light}|${root.visible}|${poseKey}`;
     // the host client copy only renders when the board sends a frame (or the notebook wants the 96 x 96 input)
+    if (clientPanel && clientShowWanted && !clientFrameWanted) showClientNext();
     if (clientPanel ? !(clientFrameWanted || wantPixels) : now - lastShot < 66 || (key === shotKey && !wantPixels && now - lastShot < 1000)) return;
     shotKey = key;
     lastShot = now;
@@ -552,12 +571,13 @@ export async function buildPresenceScene(opts = {}) {
     renderer.clear();
     renderer.render(scene, vcam);
     if (clientPanel && clientFrameWanted) {
-      // the frame the board compresses and sends: the same view, kept until the next one arrives
-      renderer.setRenderTarget(rtClient);
+      // the frame the board captures: the same view, kept aside until its result arrives
+      renderer.setRenderTarget(rtClientNext);
       renderer.clear();
       renderer.render(scene, vcam);
       clientFrameWanted = false;
-      clientHasImage = true;
+      clientNextReady = true;
+      if (clientShowWanted) showClientNext(); // capture and result in the same frame (fast simulated time)
     }
     grayMat.uniforms.gain.value = light;
     renderer.setRenderTarget(rt96);
@@ -636,26 +656,45 @@ export async function buildPresenceScene(opts = {}) {
     },
     /** Posable figure: the pose to move to (missing keys keep their goal). */
     setPose(p) {
+      // the new transition starts from where the figure is now (even in the middle of the previous one)
+      Object.assign(poseFrom, fig.pose);
       Object.assign(poseGoal, p);
+      poseT = 0;
     },
     /** Posable figure: jump to the goal pose at once (tests, page turns). */
     snapPose() {
       Object.assign(fig.pose, poseGoal);
+      Object.assign(poseFrom, poseGoal);
+      poseT = 1;
       fig.apply(fig.pose, 0);
     },
     get poseGoal() {
       return { ...poseGoal };
     },
-    /** Host client: the board sent a frame; the copy of the window shows it from the next render on. */
+    /** Host client: the board captured its frame now; its picture is taken at the next render and kept aside. */
+    clientCapture() {
+      clientFrameWanted = true;
+    },
+    /** Host client: that frame's result arrived; its picture is shown from the next render on, with the drawing set now. */
+    clientShow() {
+      clientShowWanted = true;
+    },
+    /** Both at once (a frame shown as soon as it is taken). */
     clientFrame() {
       clientFrameWanted = true;
+      clientShowWanted = true;
     },
     /**
      * Host client window. mode: 'black' (no frame yet), 'image', 'waiting' (the low power text);
      * points: 17 entries [x, y] in pixels of the 324 x 324 image or null; edges: pairs to draw.
+     * Redrawn only when something changed (it is called every frame).
      */
     setClient({ mode, points, edges }) {
       if (!clientPanel) return;
+      const key = `${mode}|${clientHasImage}|${points ? points.map((p) => (p ? `${p[0].toFixed(1)},${p[1].toFixed(1)}` : '-')).join(';') : ''}|${edges ? edges.length : 0}`;
+      if (key === clientKey) return;
+      clientKey = key;
+      clientMode = mode;
       blackMesh.visible = mode === 'black' || (mode === 'image' && !clientHasImage);
       waitMesh.visible = mode === 'waiting';
       const ctx = clientCanvas.getContext('2d');
@@ -685,6 +724,10 @@ export async function buildPresenceScene(opts = {}) {
     },
     resetClient() {
       clientHasImage = false;
+      clientNextReady = false;
+      clientFrameWanted = false;
+      clientShowWanted = false;
+      clientKey = '';
     },
     setLight(v) {
       light = v;
@@ -719,13 +762,14 @@ export async function buildPresenceScene(opts = {}) {
       // walking: legs and arms swing while the figure moves along the path
       const sw = Math.sin(walkPhase) * 0.55 * (st.walking ? 1 : 0);
       if (posable) {
-        // the arms and legs move smoothly toward the chosen pose
-        const k = 1 - Math.exp(-Math.min(dt, 0.1) * 5);
+        // the arms and legs move to the chosen pose in PRESENTATION.poseTransitionS, starting and stopping gently
+        poseT = Math.min(1, poseT + Math.min(dt, 0.1) / PRESENTATION.poseTransitionS);
+        const e = easeInOut(poseT);
         let moved = 0;
         for (const key of Object.keys(REST_POSE)) {
-          const d = poseGoal[key] - fig.pose[key];
-          fig.pose[key] += d * k;
-          moved += Math.abs(d);
+          const v = poseFrom[key] + (poseGoal[key] - poseFrom[key]) * e;
+          moved += Math.abs(v - fig.pose[key]);
+          fig.pose[key] = v;
         }
         fig.apply(fig.pose, sw);
         poseKey = moved > 0.002 || sw !== 0 ? Object.values(fig.pose).map((v) => v.toFixed(3)).join(',') + sw.toFixed(2) : poseKey;

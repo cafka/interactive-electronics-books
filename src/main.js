@@ -1047,6 +1047,61 @@ function releaseInput() {
   runtimes[current].releaseAll();
   pressPointer = null;
   canvas.classList.remove('pressing');
+  // a drag that never got its pointerup (the window lost the focus, the tab was hidden) ends here too
+  if (drag) {
+    drag = null;
+    canvas.classList.remove('dragging');
+  }
+  clearHover();
+}
+
+/* ------------------------------------------------------------------ cursor over the 3D book */
+// One place decides the cursor, from the state, so it never stays on an old value: while dragging (grabbing, or move
+// in the left page view), pressing a 3D control, over a part or a page corner (pointer), over a part's label (help),
+// otherwise grab. The canvas classes stay for the styles. The hover is checked again a few times a second, because
+// the book, the camera and the parts move under a mouse that does not.
+let hoverAt = null; // last mouse position over the canvas (null: the mouse is elsewhere)
+let hoverCheckedAt = 0, cursorNow = '';
+function cursorFor() {
+  if (drag) return leftView ? 'move' : 'grabbing';
+  if (pressPointer !== null) return 'pointer';
+  if (turn || reading) return 'default';
+  if (leftView) return 'move';
+  if (!bookIsOpen()) return 'pointer'; // a click opens the book
+  if (canvas.classList.contains('pick') || hoverZone) return 'pointer';
+  if (hoverLabel) return 'help';
+  return 'grab';
+}
+function syncCursor() {
+  const c = cursorFor();
+  if (c === cursorNow) return;
+  cursorNow = c;
+  canvas.style.cursor = c;
+}
+function clearHover() {
+  hoverAt = null;
+  hoverZone = null;
+  hoverLabel = null;
+  canvas.classList.remove('turn', 'pick', 'info');
+  syncCursor();
+}
+/** What is under a resting mouse: a part to press, a page corner, a label. */
+function updateHover(e) {
+  const picked = !!pickAt(e);
+  const part = nearestLabel(e.clientX, e.clientY, 22);
+  hoverZone = picked || (part && !nearPageCorner(e)) ? null : pageZoneAt(e);
+  hoverLabel = hoverZone ? null : part;
+  canvas.classList.toggle('pick', picked);
+  canvas.classList.toggle('turn', !!hoverZone);
+  canvas.classList.toggle('info', !picked && !hoverZone && !!hoverLabel);
+}
+/** Every frame: the hover again every 150 ms for a still mouse, then the cursor. */
+function refreshCursor(now) {
+  if (hoverAt && !drag && pressPointer === null && now - hoverCheckedAt > 150) {
+    hoverCheckedAt = now;
+    updateHover(hoverAt);
+  }
+  syncCursor();
 }
 
 /** Screen position of a bottom page corner (x = +11 right page, -11 left page). */
@@ -1103,6 +1158,7 @@ canvas.addEventListener('pointerdown', (e) => {
     pressAt = { x: e.clientX, y: e.clientY, t: e.timeStamp };
     runtimes[current].pressStart(pressSource());
     canvas.classList.add('pressing');
+    syncCursor();
     return;
   }
   // a press on a page edge becomes a page turn only if it ends as a short click; dragging still moves the camera
@@ -1112,7 +1168,8 @@ canvas.addEventListener('pointerdown', (e) => {
   canvas.classList.add('dragging');
   // no label follows the camera while it turns: a label comes back only from a hover or a tap that is not a drag
   hoverLabel = null;
-  canvas.classList.remove('info');
+  canvas.classList.remove('info', 'pick');
+  syncCursor();
 });
 canvas.addEventListener('pointermove', (e) => {
   if (e.pointerId === pressPointer) {
@@ -1125,13 +1182,10 @@ canvas.addEventListener('pointermove', (e) => {
   }
   if (!drag || drag.id !== e.pointerId) {
     if (e.pointerType === 'mouse' && !drag) {
-      const picked = pickAt(e);
-      const part = nearestLabel(e.clientX, e.clientY, 22);
-      hoverZone = picked || (part && !nearPageCorner(e)) ? null : pageZoneAt(e);
-      hoverLabel = hoverZone ? null : part;
-      canvas.classList.toggle('pick', picked);
-      canvas.classList.toggle('turn', !!hoverZone);
-      canvas.classList.toggle('info', !picked && !hoverZone && !!hoverLabel);
+      hoverAt = { clientX: e.clientX, clientY: e.clientY, pointerType: e.pointerType };
+      hoverCheckedAt = performance.now();
+      updateHover(hoverAt);
+      syncCursor();
     }
     return;
   }
@@ -1191,12 +1245,26 @@ const endPointer = (e) => {
     }
   }
 };
-for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(ev, endPointer);
+for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+  canvas.addEventListener(ev, (e) => {
+    endPointer(e);
+    // after a press or a drag the cursor shows what is under the mouse now (not what was there before)
+    if (e.pointerType === 'mouse' && e.type === 'pointerup' && !drag && pressPointer === null) {
+      hoverAt = { clientX: e.clientX, clientY: e.clientY, pointerType: e.pointerType };
+      hoverCheckedAt = performance.now();
+      updateHover(hoverAt);
+    }
+    syncCursor();
+  });
+}
+// leaving the canvas (to the notebook, a toolbar or outside the window): nothing stays hovered. A drag in progress
+// keeps going (the pointer is captured) and ends with its pointerup.
 canvas.addEventListener('pointerleave', () => {
-  if (drag) return;
-  hoverZone = null;
-  hoverLabel = null;
-  canvas.classList.remove('turn', 'pick', 'info');
+  if (drag || pressPointer !== null) {
+    hoverAt = null;
+    return;
+  }
+  clearHover();
 });
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
@@ -1501,6 +1569,7 @@ function frame() {
     if (pops[i] > 0) rt.update(time, dt, camera, renderer.domElement.height);
   });
   runtimes[current].frameUI(now);
+  refreshCursor(now);
 
   // notebook slides in as the book finishes opening; the scene shifts to stay centred in the free area
   readFactor += ((reading ? 1 : 0) - readFactor) * (1 - Math.exp(-dt * 9));
